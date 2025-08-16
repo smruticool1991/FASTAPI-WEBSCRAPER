@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   website-analyzer-api:
-    image: website-analyzer-api:latest
+    image: your-username/website-analyzer-api:latest
     build:
       context: .
       dockerfile: Dockerfile
@@ -26,9 +26,7 @@ services:
     
     # Resource limits
     deploy:
-      replicas: 6
-      placement:
-        constraints: [node.role == worker]    
+      replicas: 6    
     # Health check
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
