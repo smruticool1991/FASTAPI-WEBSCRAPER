@@ -2,6 +2,7 @@ version: '3.8'
 
 services:
   website-analyzer-api:
+    image: website-analyzer-api:latest
     build:
       context: .
       dockerfile: Dockerfile
