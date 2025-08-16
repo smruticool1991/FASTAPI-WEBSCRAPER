@@ -31,6 +31,8 @@ services:
     # Resource limits
     deploy:
       replicas: 6
+      placement:
+        constraints: [node.role == worker]
       resources:
         limits:
           cpus: '2.0'
