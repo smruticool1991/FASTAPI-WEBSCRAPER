@@ -1,0 +1,116 @@
+version: '3.8'
+
+services:
+  website-analyzer-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000-8005:8000"
+    environment:
+      # API Configuration
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
+      
+      # Optional: Custom configuration
+      - MAX_CONCURRENT_REQUESTS=10
+      - DEFAULT_TIMEOUT=15
+      - LOG_LEVEL=INFO
+      
+      # Rate limiting configuration
+      - RATE_LIMIT_MAX_CONCURRENT=10
+      - RATE_LIMIT_DELAY=1.0
+      
+    volumes:
+      # Optional: Mount logs directory
+      - ./logs:/app/logs
+      
+    restart: unless-stopped
+    
+    # Resource limits
+    deploy:
+      replicas: 6
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Optional: Add Redis for caching (uncomment if needed)
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: website-analyzer-redis
+  #   ports:
+  #     - "6379:6379"
+  #   volumes:
+  #     - redis_data:/data
+  #   restart: unless-stopped
+  #   command: redis-server --appendonly yes
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         cpus: '0.5'
+  #         memory: 256M
+
+  # Optional: Add PostgreSQL for storing results (uncomment if needed)
+  # postgres:
+  #   image: postgres:15-alpine
+  #   container_name: website-analyzer-postgres
+  #   environment:
+  #     - POSTGRES_DB=website_analyzer
+  #     - POSTGRES_USER=analyzer
+  #     - POSTGRES_PASSWORD=secure_password_change_me
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #     - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+  #   restart: unless-stopped
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         cpus: '1.0'
+  #         memory: 512M
+
+  # Optional: Add monitoring with Prometheus (uncomment if needed)
+  # prometheus:
+  #   image: prom/prometheus:latest
+  #   container_name: website-analyzer-prometheus
+  #   ports:
+  #     - "9090:9090"
+  #   volumes:
+  #     - ./prometheus.yml:/etc/prometheus/prometheus.yml
+  #     - prometheus_data:/prometheus
+  #   restart: unless-stopped
+  #   command:
+  #     - '--config.file=/etc/prometheus/prometheus.yml'
+  #     - '--storage.tsdb.path=/prometheus'
+  #     - '--web.console.libraries=/etc/prometheus/console_libraries'
+  #     - '--web.console.templates=/etc/prometheus/consoles'
+
+# Optional: Volumes for data persistence (uncomment if using databases)
+# volumes:
+#   redis_data:
+#   postgres_data:
+#   prometheus_data:
+
+# Optional: Custom network (uncomment if needed)
+# networks:
+#   website_analyzer_network:
+#     driver: bridge

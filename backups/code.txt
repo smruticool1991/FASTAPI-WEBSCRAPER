@@ -1,0 +1,913 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "batchSize": 50,
+        "options": {}
+      },
+      "id": "7abff5df-ebb0-4c8b-82d2-4f075e5c27ad",
+      "name": "Split In Batches",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -860,
+        120
+      ],
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "amount": 1
+      },
+      "id": "ad49a8b2-5192-4242-8e87-10bc933c8fd1",
+      "name": "Wait",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -940,
+        -180
+      ],
+      "webhookId": "98f18ed0-50d3-40a4-b01e-f6ce2cc22926"
+    },
+    {
+      "parameters": {
+        "url": "=https://{{ $json.domain }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "={{ $json.headers['User-Agent'] }}"
+            },
+            {
+              "name": "browserType",
+              "value": "={{ $json.browserType }}"
+            },
+            {
+              "name": "Referer",
+              "value": "={{ $json.headers.Referer }}"
+            },
+            {
+              "name": "Viewport-Width",
+              "value": "={{ $json.headers['Viewport-Width'] }}"
+            },
+            {
+              "name": "Sec-Ch-Ua-Platform",
+              "value": "={{ $json.headers['Sec-Ch-Ua-Platform'] }}"
+            },
+            {
+              "name": "Sec-Ch-Ua",
+              "value": "={{ $json.headers['Sec-Ch-Ua'] }}"
+            }
+          ]
+        },
+        "options": {
+          "allowUnauthorizedCerts": true,
+          "redirect": {
+            "redirect": {
+              "maxRedirects": 2
+            }
+          },
+          "response": {
+            "response": {
+              "fullResponse": true
+            }
+          },
+          "timeout": 15000
+        }
+      },
+      "id": "94a20c8e-cad8-42b3-a560-1ab5fb25d235",
+      "name": "Fetch Website1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        -400,
+        -180
+      ],
+      "retryOnFail": false,
+      "alwaysOutputData": false,
+      "continueOnFail": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "let items = [];\n\n// Get data from input\ntry {\n  const fetchedData = $input.all();\n  \n  if (Array.isArray(fetchedData)) {\n    items = fetchedData;\n  } else if (fetchedData) {\n    items = [fetchedData];\n  } else {\n    return [];\n  }\n} catch (error) {\n  console.log('Error accessing input data:', error.message);\n  return [];\n}\n\nif (!items || items.length === 0) {\n  return [];\n}\nlet index = 0;\nreturn items.map(item  => {\n  try {\n    // Get HTML content - handle both string and object formats\n    let html = item.json?.data || item.data || item.html || item.content || item || '';\n    \n    // Convert object with numbered keys back to string\n    if (typeof html === 'object' && html !== null && !Array.isArray(html)) {\n      const keys = Object.keys(html).filter(key => !isNaN(key)).sort((a, b) => parseInt(a) - parseInt(b));\n      html = keys.map(key => html[key]).join('');\n    }\n    \n    // Ensure we have a string\n    if (typeof html !== 'string') {\n      html = String(html || '');\n    }\n    \n    const statusCode = item.json?.statusCode || item.statusCode || 200;\n    const headers = item.json?.headers || item.headers || {};\n    \n    // Get the URL from Fetch Website1 node and extract domain\n    let domain = $input.all()[index]?.json?.domain;\n    index++;\n    let fetchedUrl = '';\n    // First, try to get URL from the previous Fetch Website1 node \n    const baseUrl = `https://${domain}`;\n    \n    // Platform Detection\n    let platform = 'Unknown';\n    const htmlLower = html.toLowerCase();\n    \n    if (htmlLower.includes('wp-content') || htmlLower.includes('wordpress') || htmlLower.includes('/wp-json/') || htmlLower.includes('wp-admin')) {\n      platform = 'WordPress';\n    } else if (htmlLower.includes('shopify') || htmlLower.includes('cdn.shopify.com') || htmlLower.includes('shopify-analytics')) {\n      platform = 'Shopify';\n    } else if (htmlLower.includes('wix.com') || htmlLower.includes('_wix') || htmlLower.includes('wix-code')) {\n      platform = 'Wix';\n    } else if (htmlLower.includes('squarespace') || htmlLower.includes('squarespace.com') || htmlLower.includes('squarespace-cdn')) {\n      platform = 'Squarespace';\n    } else if (htmlLower.includes('webflow') || htmlLower.includes('webflow.com') || htmlLower.includes('webflow.io')) {\n      platform = 'Webflow';\n    } else if (htmlLower.includes('react') || htmlLower.includes('next.js') || htmlLower.includes('_next/')) {\n      platform = 'React/Next.js';\n    } else if (htmlLower.includes('drupal') || htmlLower.includes('drupal.org')) {\n      platform = 'Drupal';\n    } else if (htmlLower.includes('joomla') || htmlLower.includes('joomla.org')) {\n      platform = 'Joomla';\n    } else if (htmlLower.includes('magento') || htmlLower.includes('mage/')) {\n      platform = 'Magento';\n    } else if (htmlLower.includes('generator\" content=\"cms\"')) {\n      platform = 'Custom CMS';\n    }\n    \n    // Purpose Detection - Enhanced with more specific categories\n    let purpose = 'General';    \n    // Security Analysis\n    const isHttps = (item.json?.httpsUrl || item.httpsUrl || item.url || '').startsWith('https');\n    const hasHSTS = headers['strict-transport-security'] ? 'Yes' : 'No';\n    const hasCSP = headers['content-security-policy'] ? 'Yes' : 'No';\n    const hasXFrameOptions = headers['x-frame-options'] ? 'Yes' : 'No';\n    \n    // SEO Analysis\n    const titleMatch = html.match(/<title[^>]*>([^<]*)<\\/title>/i);\n    const hasTitle = titleMatch ? 'Yes' : 'No';\n    const titleLength = titleMatch ? titleMatch[1].trim().length : 0;\n    const titleOptimal = titleLength >= 30 && titleLength <= 60 ? 'Yes' : 'No';\n    \n    const descriptionMatch = html.match(/<meta[^>]*name=[\\\"']description[\\\"'][^>]*content=[\\\"']([^\\\"']*)[\\\"']/i);\n    const hasDescription = descriptionMatch ? 'Yes' : 'No';\n    const descriptionLength = descriptionMatch ? descriptionMatch[1].trim().length : 0;\n    const descriptionOptimal = descriptionLength >= 120 && descriptionLength <= 160 ? 'Yes' : 'No';\n    \n    // Content Structure\n    const hasH1 = html.includes('<h1') ? 'Yes' : 'No';\n    const h1Count = (html.match(/<h1[^>]*>/gi) || []).length;\n    const hasH2 = html.includes('<h2') ? 'Yes' : 'No';\n    \n    // Technical SEO\n    const hasViewport = html.includes('name=\"viewport\"') ? 'Yes' : 'No';\n    const hasOpenGraph = html.includes('property=\"og:') ? 'Yes' : 'No';\n    const hasTwitterCard = html.includes('name=\"twitter:') ? 'Yes' : 'No';\n    const hasCanonical = html.includes('rel=\"canonical\"') ? 'Yes' : 'No';\n    const hasRobots = html.includes('name=\"robots\"') ? 'Yes' : 'No';\n    const hasStructuredData = html.includes('application/ld+json') || html.includes('schema.org') ? 'Yes' : 'No';\n    \n    // Performance\n    const hasLazyLoading = html.includes('loading=\"lazy\"') ? 'Yes' : 'No';\n    const hasPreload = html.includes('rel=\"preload\"') ? 'Yes' : 'No';\n    \n    // Accessibility\n    const hasAltTags = html.includes('alt=') ? 'Yes' : 'No';\n    const hasLang = html.includes('lang=') ? 'Yes' : 'No';\n    \n    // Contact Information Extraction\n    \n    // Enhanced Email Extraction with extensive filtering\n    const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}/g;\n    const emailMatches = html.match(emailRegex) || [];\n    \n    // Extensive list of blacklisted email patterns and domains\n    const blacklistedPatterns = [\n      // Generic/Example emails\n      'example.com', 'test.com', 'placeholder', 'sample.com', 'yoursite.com',\n      'domain.com', 'website.com', 'company.com', 'business.com', 'site.com',\n      'yourdomain.com', 'mysite.com', 'mycompany.com', 'mydomain.com',\n      \n      // System/Analytics emails\n      'sentry.io', 'sentry.wixpress.com', 'tracking', 'analytics', 'pixel',\n      'intercom', 'hubspot', 'mailchimp', 'sendgrid', 'mailgun',\n      'googleusercontent.com', 'googleapis.com', 'gstatic.com',\n      \n      // No-reply patterns\n      'noreply', 'no-reply', 'donotreply', 'do-not-reply', 'notification',\n      'automated', 'system', 'mailer-daemon', 'postmaster', 'bounce',\n      \n      // Local/Test emails\n      'localhost', '127.0.0.1', 'local.com', 'internal.com',\n      \n      // CDN/Cloud services\n      'cloudfront.net', 'amazonaws.com', 'cloudflare.com', 'akamai.net',\n      'fastly.net', 'cdn.com', 'static.com', 'assets.com',\n      \n      // Development/Tech services\n      'github.com', 'gitlab.com', 'bitbucket.org', 'heroku.com',\n      'vercel.app', 'netlify.com', 'firebase.com', 'supabase.com',\n      \n      // Image/Media extensions\n      '.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.ico', '.bmp',\n      '.mp4', '.mp3', '.wav', '.avi', '.mov', '.pdf',\n      \n      // Social media platforms (for filtering out social media email formats)\n      'facebookmail.com', 'twitter.com', 'instagram.com', 'linkedin.com',\n      \n      // Payment processors\n      'paypal.com', 'stripe.com', 'square.com', 'checkout.com',\n      \n      // Specific blocked emails from your list\n      'pbz', 'keen.io', 'smugmug.com', 'mybluehost', '.dev@', '.mail@',\n      'proteam', 'podcast', 'umusic', 'giftnote', 'heic', 'sansoxygen.com',\n      \n      // Russian domains\n      '.ru'\n    ];\n    \n    // Generic username patterns to filter\n    const genericUsernames = [\n      'info', 'admin', 'support', 'contact', 'help', 'sales', 'service',\n      'team', 'hello', 'hi', 'hey', 'mail', 'email', 'newsletter',\n      'subscribe', 'unsubscribe', 'webmaster', 'hostmaster', 'root',\n      'abuse', 'spam', 'privacy', 'security', 'billing', 'accounts',\n      'hr', 'jobs', 'careers', 'press', 'media', 'marketing', 'pr',\n      'feedback', 'suggestions', 'complaints', 'enquiries', 'enquiry',\n      'query', 'queries', 'noc', 'tech', 'technical', 'it', 'dev',\n      'developer', 'api', 'alerts', 'notifications', 'updates',\n      'news', 'blog', 'post', 'comments', 'moderator', 'editor',\n      'author', 'writer', 'contributor', 'guest', 'user', 'users',\n      'member', 'members', 'account', 'accounts', 'profile', 'profiles',\n      'registration', 'register', 'signup', 'signin', 'login', 'logout',\n      'password', 'reset', 'confirm', 'verify', 'validation', 'activate',\n      'test', 'testing', 'demo', 'trial', 'free', 'pro', 'premium',\n      'enterprise', 'business', 'corporate', 'company', 'office',\n      'general', 'public', 'private', 'internal', 'external',\n      'customer', 'client', 'partner', 'vendor', 'supplier',\n      'invoice', 'order', 'orders', 'payment', 'payments', 'refund',\n      'shipping', 'delivery', 'returns', 'exchange', 'warranty',\n      'legal', 'compliance', 'gdpr', 'privacy', 'terms', 'policy',\n      'disclaimer', 'copyright', 'trademark', 'patents', 'ip',\n      'investor', 'investors', 'shareholder', 'shareholders', 'board',\n      'ceo', 'cto', 'cfo', 'coo', 'hr', 'recruiter', 'hiring',\n      'community', 'forum', 'discussion', 'chat', 'talk', 'ask',\n      'faq', 'faqs', 'kb', 'knowledge', 'docs', 'documentation',\n      'api', 'sdk', 'integration', 'webhook', 'callback', 'bounce',\n      'undelivered', 'failed', 'mailer', 'daemon', 'system', 'auto',\n      'automated', 'bot', 'robot', 'crawler', 'spider', 'scraper',\n      'monitor', 'monitoring', 'alert', 'warning', 'error', 'errors',\n      'log', 'logs', 'report', 'reports', 'analytics', 'metrics',\n      'stats', 'statistics', 'data', 'export', 'import', 'backup',\n      'restore', 'archive', 'archives', 'old', 'legacy', 'deprecated',\n      'temp', 'tmp', 'temporary', 'cache', 'cached', 'buffer',\n      'queue', 'batch', 'bulk', 'mass', 'all', 'everyone', 'everybody',\n      'nobody', 'somebody', 'someone', 'anyone', 'anybody', 'whoever',\n      'whatever', 'whenever', 'wherever', 'however', 'whichever',\n      'social', 'facebook', 'twitter', 'instagram', 'youtube', 'linkedin',\n      'pinterest', 'tiktok', 'snapchat', 'whatsapp', 'telegram',\n      'discord', 'slack', 'teams', 'zoom', 'skype', 'messenger',\n      'notification', 'notifications', 'reminder', 'reminders', 'digest',\n      'summary', 'weekly', 'daily', 'monthly', 'yearly', 'annual',\n      'quarterly', 'seasonal', 'holiday', 'special', 'promo', 'promotion',\n      'deal', 'deals', 'offer', 'offers', 'discount', 'discounts',\n      'coupon', 'coupons', 'code', 'codes', 'voucher', 'vouchers',\n      'gift', 'gifts', 'reward', 'rewards', 'loyalty', 'points',\n      'affiliate', 'affiliates', 'referral', 'referrals', 'refer',\n      'share', 'sharing', 'forward', 'forwarding', 'reply', 'replies',\n      'response', 'responses', 'answer', 'answers', 'question', 'questions',\n      'survey', 'surveys', 'poll', 'polls', 'vote', 'votes', 'voting',\n      'feedback', 'review', 'reviews', 'rating', 'ratings', 'rate',\n      'comment', 'comments', 'testimonial', 'testimonials', 'case',\n      'study', 'studies', 'research', 'analysis', 'report', 'white',\n      'paper', 'ebook', 'guide', 'tutorial', 'course', 'lesson',\n      'training', 'webinar', 'seminar', 'workshop', 'event', 'events',\n      'conference', 'summit', 'meetup', 'meeting', 'appointment',\n      'booking', 'reservation', 'rsvp', 'attendance', 'registration',\n      'ticket', 'tickets', 'pass', 'passes', 'entry', 'access',\n      'vip', 'exclusive', 'member', 'membership', 'subscription',\n      'subscribe', 'unsubscribe', 'opt', 'optin', 'optout', 'consent',\n      'permission', 'preferences', 'settings', 'config', 'configuration',\n      'setup', 'install', 'installation', 'update', 'updates', 'upgrade',\n      'patch', 'patches', 'fix', 'fixes', 'bug', 'bugs', 'issue',\n      'issues', 'problem', 'problems', 'solution', 'solutions', 'resolve',\n      'resolved', 'pending', 'processing', 'progress', 'status', 'queue',\n      'inbox', 'outbox', 'sent', 'drafts', 'trash', 'junk', 'spam',\n      'phishing', 'scam', 'fraud', 'fake', 'false', 'invalid', 'valid',\n      'verified', 'unverified', 'confirmed', 'unconfirmed', 'approved',\n      'unapproved', 'rejected', 'accepted', 'declined', 'blocked',\n      'unblocked', 'banned', 'unbanned', 'suspended', 'active', 'inactive',\n      'enabled', 'disabled', 'on', 'off', 'yes', 'no', 'true', 'false',\n      'default', 'custom', 'standard', 'premium', 'pro', 'basic', 'free',\n      'paid', 'trial', 'beta', 'alpha', 'stable', 'release', 'version',\n      'build', 'dev', 'development', 'staging', 'production', 'live',\n      'test1', 'test2', 'test3', 'testing1', 'testing2', 'testing3',\n      'example', 'sample', 'demo1', 'demo2', 'demo3', 'dummy', 'fake',\n      'mock', 'placeholder', 'temporary', 'temp1', 'temp2', 'temp3',\n      'xyz', 'abc', 'foo', 'bar', 'baz', 'qux', 'quux', 'corge',\n      'grault', 'garply', 'waldo', 'fred', 'plugh', 'xyzzy', 'thud',\n      'zzz', 'aaa', 'bbb', 'ccc', 'ddd', 'eee', 'fff', 'ggg', 'hhh',\n      'iii', 'jjj', 'kkk', 'lll', 'mmm', 'nnn', 'ooo', 'ppp', 'qqq',\n      'rrr', 'sss', 'ttt', 'uuu', 'vvv', 'www', 'xxx', 'yyy'\n    ];\n    \n    // Function to score email quality (higher is better)\n    const scoreEmail = (email) => {\n      let score = 100;\n      const emailLower = email.toLowerCase();\n      const [username, domain] = emailLower.split('@');\n      \n      // Penalize generic usernames\n      genericUsernames.forEach(generic => {\n        if (username === generic || username.startsWith(generic + '.') || username.endsWith('.' + generic)) {\n          score -= 30;\n        }\n      });\n      \n      // Penalize emails with numbers at the end (often generic)\n      if (/\\d{2,}$/.test(username)) {\n        score -= 20;\n      }\n      \n      // Penalize very short usernames\n      if (username.length <= 2) {\n        score -= 25;\n      }\n      \n      // Penalize emails that look like hashes\n      if (/^[a-f0-9]{8,}$/.test(username)) {\n        score -= 50;\n      }\n      \n      // Bonus for personal-looking emails (firstname.lastname pattern)\n      if (/^[a-z]+\\.[a-z]+$/.test(username) && username.length > 5) {\n        score += 30;\n      }\n      \n      // Bonus for emails with company domain (not generic providers)\n      const genericProviders = ['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'aol.com', 'mail.com', 'protonmail.com', 'icloud.com'];\n      if (!genericProviders.includes(domain)) {\n        score += 20;\n      }\n      \n      // Bonus if domain matches the website domain\n      if (domain === domain.toLowerCase()) {\n        score += 40;\n      }\n      \n      return score;\n    };\n    \n    const validEmails = [...new Set(emailMatches)].filter(email => {\n      const emailLower = email.toLowerCase().trim();\n      const [username, domain] = emailLower.split('@');\n      \n      // Basic validation\n      const emailValidationRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$/;\n      if (!emailValidationRegex.test(emailLower)) return false;\n      \n      // Length validation\n      if (emailLower.length < 5 || emailLower.length > 254) return false;\n      \n      // Check against blacklisted patterns\n      for (const pattern of blacklistedPatterns) {\n        if (emailLower.includes(pattern)) return false;\n      }\n      \n      // Check for hash-like emails (32+ character usernames that look like hashes)\n      if (/^[a-f0-9]{32,}@/.test(emailLower)) return false;\n      \n      // Check for emails with too many dots or special characters\n      if ((username.match(/\\./g) || []).length > 2) return false;\n      \n      // Filter out emails that are just generic username @ gmail\n      if (genericUsernames.includes(username) && emailLower.includes('gmail.com')) return false;\n      \n      // Additional specific filters from your list\n      const specificBlockList = [\n        'ericjonesmyemail@gmail.com',\n        'wweeiihhuuaanngg@gmail.com',\n        'info@gmail.com',\n        'ula@gmail.com',\n        'myemail@',\n        'yourname@',\n        'name@domain',\n        'email@domain',\n        'your@email',\n        'user@',\n        'you@',\n        'hi@',\n        'test@',\n        'job@',\n        'news@',\n        'name@',\n        'domain@',\n        'xxx@',\n        'discovered@',\n        'donate@',\n        'link@',\n        'index@',\n        'click@',\n        'remove@',\n        'accessibility@',\n        '@example'\n      ];\n      \n      for (const blocked of specificBlockList) {\n        if (emailLower.includes(blocked)) return false;\n      }\n      \n      return true;\n    });\n    \n    // Sort emails by quality score and take top 2\n    const scoredEmails = validEmails.map(email => ({\n      email,\n      score: scoreEmail(email)\n    }));\n    \n    scoredEmails.sort((a, b) => b.score - a.score);\n    const uniqueEmails = scoredEmails.slice(0, 2).map(item => item.email);\n    \n    // Extract Phone Numbers with enhanced validation\n    const phoneRegex = /(?:\\+?1[-.\\s]?)?\\(?([0-9]{3})\\)?[-.\\s]?([0-9]{3})[-.\\s]?([0-9]{4})|(?:\\+[1-9]\\d{0,3}[-.\\s]?)?(?:\\([0-9]{1,4}\\)[-.\\s]?)?[0-9]{1,4}[-.\\s]?[0-9]{1,9}/g;\n    const phoneMatches = html.match(phoneRegex) || [];\n    \n    const validPhones = [...new Set(phoneMatches)].filter(phone => {\n      // Clean the phone number for validation\n      const cleanPhone = phone.replace(/[^\\d+]/g, '');\n      \n      return cleanPhone.length >= 10 && \n             cleanPhone.length <= 15 && // International format max length\n             !cleanPhone.includes('1234567890') && \n             !cleanPhone.includes('0000000000') &&\n             !cleanPhone.includes('1111111111') &&\n             !cleanPhone.includes('2222222222') &&\n             !cleanPhone.includes('3333333333') &&\n             !cleanPhone.includes('4444444444') &&\n             !cleanPhone.includes('5555555555') &&\n             !cleanPhone.includes('6666666666') &&\n             !cleanPhone.includes('7777777777') &&\n             !cleanPhone.includes('8888888888') &&\n             !cleanPhone.includes('9999999999') &&\n             !/^(\\d)\\1+$/.test(cleanPhone.replace(/^\\+?1/, '')) && // No repeated digits\n             !/123456789/.test(cleanPhone) && // No sequential numbers\n             !/987654321/.test(cleanPhone); // No reverse sequential\n    });\n    \n    // Limit to maximum 2 phone numbers\n    const uniquePhones = validPhones.slice(0, 2);\n    \n    // Enhanced Contact Page Detection\n    // Use a more specific regex that properly captures individual anchor tags\n    const contactPageRegex = /<a[^>]*href=[\"']([^\"']+)[\"'][^>]*>([^<]+(?:<[^>]+>[^<]+)*?)<\\/a>/gi;\n    const contactPageMatches = [];\n    let match;\n    \n    // Extended list of contact-related keywords\n    const contactKeywords = [\n      'contact', 'contact us', 'contact-us', 'contactus',\n      'get in touch', 'get-in-touch', 'getintouch',\n      'reach out', 'reach-out', 'reachout',\n      'reach us', 'reach-us', 'reachus',\n      'talk to us', 'talk-to-us', 'talktous',\n      'speak to us', 'speak-to-us', 'speaktous',\n      'get started', 'get-started', 'getstarted',\n      'start now', 'start-now', 'startnow',\n      'connect', 'connect with us', 'connect-with-us',\n      'message us', 'message-us', 'messageus',\n      'email us', 'email-us', 'emailus',\n      'call us', 'call-us', 'callus',\n      'write to us', 'write-to-us', 'writetous',\n      'drop us a line', 'drop-us-a-line',\n      'send message', 'send-message', 'sendmessage',\n      'send us a message', 'send-us-a-message',\n      'inquiry', 'inquiries', 'enquiry', 'enquiries',\n      'questions', 'ask us', 'ask-us', 'askus',\n      'support', 'help', 'assistance',\n      'let\\'s talk', 'lets-talk', 'letstalk',\n      'let\\'s chat', 'lets-chat', 'letschat',\n      'schedule a call', 'schedule-a-call', 'scheduleacall',\n      'book a call', 'book-a-call', 'bookacall',\n      'request info', 'request-info', 'requestinfo',\n      'more info', 'more-info', 'moreinfo',\n      'find us', 'find-us', 'findus',\n      'visit us', 'visit-us', 'visitus',\n      'office', 'offices', 'location', 'locations',\n      'where to find us', 'where-to-find-us',\n      'how to reach us', 'how-to-reach-us',\n      'say hello', 'say-hello', 'sayhello',\n      'drop by', 'drop-by', 'dropby',\n      'come see us', 'come-see-us', 'comeseeus',\n      'feedback', 'suggestions', 'comments'\n    ];\n    \n    // First, try to find all anchor tags and filter for contact-related ones\n    const allLinksRegex = /<a[^>]*href=[\"']([^\"']+)[\"'][^>]*?>([^<]+(?:<(?!\\/a>)[^>]+>[^<]+)*?)<\\/a>/gi;\n    const allLinks = [];\n    \n    while ((match = allLinksRegex.exec(html)) !== null) {\n      if (match[1] && match[1].trim()) {\n        allLinks.push({\n          href: match[1].trim(),\n          text: match[2].replace(/<[^>]+>/g, ' ').replace(/\\s+/g, ' ').trim()\n        });\n      }\n    }\n    \n    // Process each link\n    for (const link of allLinks) {\n      const href = link.href;\n      const linkText = link.text.toLowerCase();\n      const hrefLower = href.toLowerCase();\n      \n      // Check if this is a contact-related link\n      let isContactLink = false;\n      \n      // Priority check: href contains contact-related patterns\n      if (hrefLower.includes('contact') || \n          hrefLower.includes('get-in-touch') || \n          hrefLower.includes('reach-out') ||\n          hrefLower.includes('connect') ||\n          hrefLower.includes('inquiry') ||\n          hrefLower.includes('enquiry')) {\n        isContactLink = true;\n      }\n      \n      // Secondary check: link text contains contact keywords\n      if (!isContactLink) {\n        for (const keyword of contactKeywords) {\n          if (linkText === keyword || \n              linkText.includes(keyword) ||\n              linkText.replace(/\\s+/g, '-') === keyword ||\n              linkText.replace(/\\s+/g, '') === keyword.replace(/\\s+/g, '')) {\n            isContactLink = true;\n            break;\n          }\n        }\n      }\n      \n      if (isContactLink && href) {\n        let fullUrl = href;\n        \n        // Convert relative URLs to absolute URLs\n        if (href.startsWith('/')) {\n          fullUrl = baseUrl + href;\n        } else if (href.startsWith('./')) {\n          fullUrl = baseUrl + href.substring(1);\n        } else if (href.startsWith('../')) {\n          // Handle relative parent directory paths\n          const pathParts = baseUrl.split('/');\n          pathParts.pop(); // Remove last segment\n          fullUrl = pathParts.join('/') + href.substring(2);\n        } else if (!href.startsWith('http') && !href.includes(':')) {\n          fullUrl = baseUrl + '/' + href;\n        }\n        \n        // Clean up double slashes (except after protocol)\n        fullUrl = fullUrl.replace(/([^:]\\/)\\/+/g, '$1');\n        \n        // Filter out non-contact URLs and invalid URLs\n        if (!fullUrl.includes('mailto:') && \n            !fullUrl.includes('tel:') && \n            !fullUrl.includes('javascript:') && \n            !fullUrl.includes('void(0)') &&\n            !fullUrl.startsWith('#') &&\n            fullUrl.length < 200 &&\n            fullUrl.includes('://')) {\n          contactPageMatches.push({\n            url: fullUrl,\n            linkText: link.text\n          });\n        }\n      }\n    }\n    \n    // Also search for contact patterns in onclick handlers and data attributes\n    const onclickRegex = /(?:onclick|data-href|data-url|href)=[\"']([^\"']*contact[^\"']*?)[\"']/gi;\n    while ((match = onclickRegex.exec(html)) !== null) {\n      const url = match[1];\n      if (url && !url.includes('javascript:') && !url.includes('void(0)') && !url.startsWith('#')) {\n        let fullUrl = url;\n        if (!url.startsWith('http')) {\n          if (url.startsWith('/')) {\n            fullUrl = baseUrl + url;\n          } else {\n            fullUrl = baseUrl + '/' + url;\n          }\n        }\n        // Clean up double slashes\n        fullUrl = fullUrl.replace(/([^:]\\/)\\/+/g, '$1');\n        \n        if (fullUrl.includes('://') && fullUrl.length < 200) {\n          contactPageMatches.push({\n            url: fullUrl,\n            linkText: 'Contact' // Default text for onclick handlers\n          });\n        }\n      }\n    }\n    \n    // Look for contact forms as indicators of contact pages\n    if (contactPageMatches.length === 0) {\n      // Check if current page has a contact form\n      const hasContactForm = html.includes('<form') && \n        (html.toLowerCase().includes('contact') || \n         html.toLowerCase().includes('message') ||\n         html.toLowerCase().includes('inquiry') ||\n         html.toLowerCase().includes('get in touch'));\n      \n      if (hasContactForm) {\n        contactPageMatches.push({\n          url: fetchedUrl,\n          linkText: 'Contact Form (Current Page)'\n        });\n      }\n    }\n    \n    // Remove duplicates, keeping only unique URLs\n    const seenUrls = new Set();\n    const uniqueContactPages = contactPageMatches.filter(item => {\n      // Normalize URL for comparison (remove trailing slashes)\n      const normalizedUrl = item.url.replace(/\\/$/, '');\n      if (seenUrls.has(normalizedUrl)) {\n        return false;\n      }\n      seenUrls.add(normalizedUrl);\n      return true;\n    });\n    \n    // If we still don't have contact pages, do a final aggressive search\n    if (uniqueContactPages.length === 0) {\n      // Look for any href that might be a contact page\n      const simpleHrefRegex = /href=[\"']([^\"']+)[\"']/gi;\n      const potentialContactUrls = [];\n      \n      while ((match = simpleHrefRegex.exec(html)) !== null) {\n        const href = match[1];\n        const hrefLower = href.toLowerCase();\n        \n        // Check if URL contains contact-related keywords\n        if ((hrefLower.includes('contact') ||\n            hrefLower.includes('contact-us') ||\n            hrefLower.includes('contact_us') ||\n            hrefLower.includes('connect') ||\n            hrefLower.includes('reach') ||\n            hrefLower.includes('inquiry') ||\n            hrefLower.includes('support') ||\n            hrefLower.includes('help') ||\n            hrefLower.includes('customer-service') ||\n            hrefLower.includes('get-in-touch') ||\n            hrefLower.includes('feedback') ||\n            hrefLower.includes('assistance') &&\n            !href.includes('mailto:') &&\n            !href.includes('tel:') &&\n            !href.includes('javascript:') &&\n            !href.includes('#'))){\n          \n          let fullUrl = href;\n          if (!href.startsWith('http')) {\n            if (href.startsWith('/')) {\n              fullUrl = baseUrl + href;\n            } else {\n              fullUrl = baseUrl + '/' + href;\n            }\n          }\n          \n          fullUrl = fullUrl.replace(/([^:]\\/)\\/+/g, '$1');\n          \n          if (fullUrl.includes('://')) {\n            potentialContactUrls.push({\n              url: fullUrl,\n              linkText: 'Contact Page'\n            });\n          }\n        }\n      }\n      \n      // Add unique URLs from aggressive search\n      potentialContactUrls.forEach(item => {\n        const normalizedUrl = item.url.replace(/\\/$/, '');\n        if (!seenUrls.has(normalizedUrl)) {\n          uniqueContactPages.push(item);\n          seenUrls.add(normalizedUrl);\n        }\n      });\n    }\n    \n    // Extract Social Media Links\n    const socialLinks = {\n      facebook: [],\n      twitter: [],\n      linkedin: [],\n      instagram: [],\n      youtube: [],\n      pinterest: [],\n      tiktok: [],\n      whatsapp: []\n    };\n    \n    // Facebook\n    const facebookRegex = /https?:\\/\\/(?:www\\.)?(?:facebook\\.com|fb\\.com)\\/[a-zA-Z0-9._-]+/g;\n    socialLinks.facebook = [...new Set(html.match(facebookRegex) || [])];\n    \n    // Twitter/X\n    const twitterRegex = /https?:\\/\\/(?:www\\.)?(?:twitter\\.com|x\\.com)\\/[a-zA-Z0-9._-]+/g;\n    socialLinks.twitter = [...new Set(html.match(twitterRegex) || [])];\n    \n    // LinkedIn\n    const linkedinRegex = /https?:\\/\\/(?:www\\.)?linkedin\\.com\\/(?:in|company)\\/[a-zA-Z0-9._-]+/g;\n    socialLinks.linkedin = [...new Set(html.match(linkedinRegex) || [])];\n    \n    // Instagram\n    const instagramRegex = /https?:\\/\\/(?:www\\.)?instagram\\.com\\/[a-zA-Z0-9._-]+/g;\n    socialLinks.instagram = [...new Set(html.match(instagramRegex) || [])];\n    \n    // YouTube\n    const youtubeRegex = /https?:\\/\\/(?:www\\.)?(?:youtube\\.com\\/(?:channel\\/|user\\/|c\\/)?|youtu\\.be\\/)[a-zA-Z0-9._-]+/g;\n    socialLinks.youtube = [...new Set(html.match(youtubeRegex) || [])];\n    \n    // Pinterest\n    const pinterestRegex = /https?:\\/\\/(?:www\\.)?pinterest\\.com\\/[a-zA-Z0-9._-]+/g;\n    socialLinks.pinterest = [...new Set(html.match(pinterestRegex) || [])];\n    \n    // TikTok\n    const tiktokRegex = /https?:\\/\\/(?:www\\.)?tiktok\\.com\\/@[a-zA-Z0-9._-]+/g;\n    socialLinks.tiktok = [...new Set(html.match(tiktokRegex) || [])];\n    \n    // WhatsApp\n    const whatsappRegex = /https?:\\/\\/(?:wa\\.me|api\\.whatsapp\\.com)\\/[0-9]+/g;\n    socialLinks.whatsapp = [...new Set(html.match(whatsappRegex) || [])];\n    \n    // Count total social links\n    const totalSocialLinks = Object.values(socialLinks).reduce((total, links) => total + links.length, 0);\n    \n    // Calculate SEO Score\n    let seoScore = 0;\n    if (hasTitle === 'Yes') seoScore += 15;\n    if (titleOptimal === 'Yes') seoScore += 10;\n    if (hasDescription === 'Yes') seoScore += 15;\n    if (descriptionOptimal === 'Yes') seoScore += 10;\n    if (hasH1 === 'Yes') seoScore += 10;\n    if (h1Count === 1) seoScore += 5;\n    if (hasH2 === 'Yes') seoScore += 5;\n    if (hasCanonical === 'Yes') seoScore += 5;\n    if (hasOpenGraph === 'Yes') seoScore += 10;\n    if (hasTwitterCard === 'Yes') seoScore += 5;\n    if (hasStructuredData === 'Yes') seoScore += 10;\n    \n    return {\n      json: {        \n        // Analysis Results\n        domain: domain,\n        platform: platform,\n        purpose: purpose,\n        \n        // Security\n        isHttps: isHttps ? 'Yes' : 'No',\n        hasHSTS: hasHSTS,\n        hasCSP: hasCSP,\n        hasXFrameOptions: hasXFrameOptions,\n        \n        // SEO\n        hasTitle: hasTitle,\n        titleLength: titleLength,\n        titleOptimal: titleOptimal,\n        hasDescription: hasDescription,\n        descriptionLength: descriptionLength,\n        descriptionOptimal: descriptionOptimal,\n        \n        // Content Structure\n        hasH1: hasH1,\n        h1Count: h1Count,\n        hasH2: hasH2,\n        \n        // Technical SEO\n        hasViewport: hasViewport,\n        hasCanonical: hasCanonical,\n        hasRobots: hasRobots,\n        hasStructuredData: hasStructuredData,\n        \n        // Social Media\n        hasOpenGraph: hasOpenGraph,\n        hasTwitterCard: hasTwitterCard,\n        \n        // Performance\n        hasLazyLoading: hasLazyLoading,\n        hasPreload: hasPreload,\n        \n        // Accessibility\n        hasAltTags: hasAltTags,\n        hasLang: hasLang,\n        \n        // Contact Information\n        emails: uniqueEmails,\n        emailCount: uniqueEmails.length,\n        phones: uniquePhones,\n        phoneCount: uniquePhones.length,\n        \n        // Contact Page URLs - ENHANCED\n        contactPages: uniqueContactPages,\n        contactPageCount: uniqueContactPages.length,\n        hasContactPage: uniqueContactPages.length > 0 ? 'Yes' : 'No',\n        \n        // Social Media Links\n        socialLinks: socialLinks,\n        totalSocialLinks: totalSocialLinks,\n        hasFacebook: socialLinks.facebook.length > 0 ? 'Yes' : 'No',\n        hasTwitter: socialLinks.twitter.length > 0 ? 'Yes' : 'No',\n        hasLinkedin: socialLinks.linkedin.length > 0 ? 'Yes' : 'No',\n        hasInstagram: socialLinks.instagram.length > 0 ? 'Yes' : 'No',\n        hasYoutube: socialLinks.youtube.length > 0 ? 'Yes' : 'No',\n        hasPinterest: socialLinks.pinterest.length > 0 ? 'Yes' : 'No',\n        hasTiktok: socialLinks.tiktok.length > 0 ? 'Yes' : 'No',\n        hasWhatsapp: socialLinks.whatsapp.length > 0 ? 'Yes' : 'No',\n        \n        // Scoring\n        seoScore: seoScore,\n        seoGrade: seoScore >= 80 ? 'A' : seoScore >= 60 ? 'B' : seoScore >= 40 ? 'C' : 'D',\n        \n        // Status\n        status: statusCode === 200 ? 'Active' : `Not Accessible (${statusCode})`,\n        analyzedAt: new Date().toISOString()\n      }\n    };\n    \n  } catch (error) {\n    return {\n      json: {\n        ...item,\n        platform: 'Error',\n        purpose: 'Error',\n        status: 'Analysis Failed',\n        error: error.message,\n        analyzedAt: new Date().toISOString()\n      }\n    };\n  }\n});"
+      },
+      "id": "8f018682-67f7-49c9-96fe-d04b57358453",
+      "name": "Analyze Website1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        280,
+        -200
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json.body;\nconst splitDomains = raw.split('\\n').map(d => d.trim()).filter(Boolean);\n\nreturn splitDomains.map(domain => ({\n  json: { domain }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1500,
+        120
+      ],
+      "id": "6b857c97-6a0e-45dc-9933-664e85f8c8c7",
+      "name": "Split Domains"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "dc48a2de-dccd-4c63-be18-87dbcc35e0ce",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -1700,
+        120
+      ],
+      "id": "fb4a6f34-909c-44ba-b0e3-29c834a44b28",
+      "name": "Webhook",
+      "webhookId": "dc48a2de-dccd-4c63-be18-87dbcc35e0ce"
+    },
+    {
+      "parameters": {
+        "maxItems": 1000
+      },
+      "type": "n8n-nodes-base.limit",
+      "typeVersion": 1,
+      "position": [
+        -1260,
+        120
+      ],
+      "id": "273d8210-2ce0-4a3f-9e3e-0e5e9a203e03",
+      "name": "Limit"
+    },
+    {
+      "parameters": {
+        "amount": 1
+      },
+      "id": "1208d2a9-4009-4714-a4c4-9544fa2cb0e4",
+      "name": "Wait1",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -980,
+        -540
+      ],
+      "webhookId": "e41e4700-d318-433a-a4b0-427e3e82b537"
+    },
+    {
+      "parameters": {
+        "url": "=https://y2qmqzkz5p4myj43vukrxpzica0pucrt.lambda-url.ap-south-1.on.aws/?url={{ $json.domain }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "options": {
+          "allowUnauthorizedCerts": true,
+          "redirect": {
+            "redirect": {
+              "maxRedirects": 5
+            }
+          },
+          "response": {
+            "response": {
+              "fullResponse": true
+            }
+          },
+          "timeout": 15000
+        }
+      },
+      "id": "cb3493ac-b7ca-40fa-92c1-c9527c8a203f",
+      "name": "Fetch Website",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        -700,
+        -540
+      ],
+      "retryOnFail": false,
+      "continueOnFail": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "d046523e-cc07-4853-9a27-9a3f180e97d5",
+              "name": "domain",
+              "value": "={{ $('Analyze Website1').item.json.domain }}",
+              "type": "string"
+            },
+            {
+              "id": "4bcb2d46-1d00-42dc-8587-3aadd1ec3936",
+              "name": "platform",
+              "value": "={{ $('Analyze Website1').item.json.platform }}",
+              "type": "string"
+            },
+            {
+              "id": "66b71910-a88f-4962-b907-fcb0e1e695ed",
+              "name": "purpose",
+              "value": "={{ $('Analyze Website1').item.json.purpose }}",
+              "type": "string"
+            },
+            {
+              "id": "5f01f6e4-1f90-47c0-8a83-7c2d74a131f0",
+              "name": "isHttps",
+              "value": "={{ $('Analyze Website1').item.json.isHttps }}",
+              "type": "string"
+            },
+            {
+              "id": "d670ec72-8301-4a5f-aac6-f270b246737a",
+              "name": "hasHSTS",
+              "value": "={{ $('Analyze Website1').item.json.hasHSTS }}",
+              "type": "string"
+            },
+            {
+              "id": "b738585f-6084-402f-8121-fd893941ec73",
+              "name": "hasCSP",
+              "value": "={{ $('Analyze Website1').item.json.hasCSP }}",
+              "type": "string"
+            },
+            {
+              "id": "8548f69d-7ca4-4758-8bdd-1d933806d45f",
+              "name": "hasXFrameOptions",
+              "value": "={{ $('Analyze Website1').item.json.hasXFrameOptions }}",
+              "type": "string"
+            },
+            {
+              "id": "44a3b8dd-ab4e-47cc-8754-c32acb6deabd",
+              "name": "hasTitle",
+              "value": "={{ $('Analyze Website1').item.json.hasTitle }}",
+              "type": "string"
+            },
+            {
+              "id": "fdd9cbf3-5008-4dab-bc05-cc4963869543",
+              "name": "titleLength",
+              "value": "={{ $('Analyze Website1').item.json.titleLength }}",
+              "type": "number"
+            },
+            {
+              "id": "cda0e910-a7c5-4108-8e9c-89ae668b9a9b",
+              "name": "titleOptimal",
+              "value": "={{ $('Analyze Website1').item.json.titleOptimal }}",
+              "type": "string"
+            },
+            {
+              "id": "32d2ff08-5e11-42d0-b7fc-f4ff4e814f8c",
+              "name": "hasH1",
+              "value": "={{ $('Analyze Website1').item.json.hasH1 }}",
+              "type": "string"
+            },
+            {
+              "id": "8d10b5a1-2f22-442f-8c85-b00cd7bf62e6",
+              "name": "h1Count",
+              "value": "={{ $('Analyze Website1').item.json.h1Count }}",
+              "type": "number"
+            },
+            {
+              "id": "c9e4462b-81f6-4f72-a2ed-4b27a9c01c04",
+              "name": "hasH2",
+              "value": "={{ $('Analyze Website1').item.json.hasH2 }}",
+              "type": "string"
+            },
+            {
+              "id": "2d49603f-2d60-4adb-bf93-8ae3db064750",
+              "name": "hasViewport",
+              "value": "={{ $('Analyze Website1').item.json.hasViewport }}",
+              "type": "string"
+            },
+            {
+              "id": "415882da-38ff-45af-a0c4-3033ab88b528",
+              "name": "hasCanonical",
+              "value": "={{ $('Analyze Website1').item.json.hasCanonical }}",
+              "type": "string"
+            },
+            {
+              "id": "508491af-3502-4e9e-b2c7-e8e90ea56d3f",
+              "name": "hasRobots",
+              "value": "={{ $('Analyze Website1').item.json.hasRobots }}",
+              "type": "string"
+            },
+            {
+              "id": "d50e1d9f-b6fe-4348-a1a6-01ee2168a72f",
+              "name": "hasStructuredData",
+              "value": "={{ $('Analyze Website1').item.json.hasStructuredData }}",
+              "type": "string"
+            },
+            {
+              "id": "62075336-fb69-46a5-b104-1e7f68f64e67",
+              "name": "hasOpenGraph",
+              "value": "={{ $('Analyze Website1').item.json.hasOpenGraph }}",
+              "type": "string"
+            },
+            {
+              "id": "e5029ad7-2fc2-4cc1-94f4-0a742ea081e7",
+              "name": "hasTwitterCard",
+              "value": "={{ $('Analyze Website1').item.json.hasTwitterCard }}",
+              "type": "string"
+            },
+            {
+              "id": "1df49218-aae2-4ec4-829b-ea9efaf027d9",
+              "name": "hasLazyLoading",
+              "value": "={{ $('Analyze Website1').item.json.hasLazyLoading }}",
+              "type": "string"
+            },
+            {
+              "id": "efdefa91-1a9d-4270-b457-1582cbf48a05",
+              "name": "hasPreload",
+              "value": "={{ $('Analyze Website1').item.json.hasPreload }}",
+              "type": "string"
+            },
+            {
+              "id": "9fdca973-e270-40ed-bfd8-86ba7c0c1545",
+              "name": "hasAltTags",
+              "value": "={{ $('Analyze Website1').item.json.hasAltTags }}",
+              "type": "string"
+            },
+            {
+              "id": "3ab81694-2b0f-49e5-bd7d-cef2b952f7ba",
+              "name": "hasLang",
+              "value": "={{ $('Analyze Website1').item.json.hasLang }}",
+              "type": "string"
+            },
+            {
+              "id": "12da6227-b6df-4c6e-82a2-4c8c6c746627",
+              "name": "emails",
+              "value": "={{ $json.body.emails }}",
+              "type": "array"
+            },
+            {
+              "id": "5d1f26fe-b8e7-4bb7-b17c-e1800f585df3",
+              "name": "emailCount",
+              "value": "={{ $json.body.count }}",
+              "type": "number"
+            },
+            {
+              "id": "c884d981-5005-4281-b1ab-7434b4493aae",
+              "name": "phones",
+              "value": "={{ $('Analyze Website1').item.json.phones }}",
+              "type": "array"
+            },
+            {
+              "id": "b5102bc2-2247-4dd0-a5c3-5f9f6554af30",
+              "name": "phoneCount",
+              "value": "={{ $('Analyze Website1').item.json.phoneCount }}",
+              "type": "number"
+            },
+            {
+              "id": "4e6bb30c-4deb-4e7b-b560-1fb394c3afe6",
+              "name": "contactPages",
+              "value": "={{ $('Analyze Website1').item.json.contactPages }}",
+              "type": "array"
+            },
+            {
+              "id": "c432e775-5e3d-4f7b-8891-845232f337f4",
+              "name": "contactPageCount",
+              "value": "={{ $('Analyze Website1').item.json.contactPageCount }}",
+              "type": "number"
+            },
+            {
+              "id": "8f9ec06a-cc04-4ae4-80ab-bc85d0e39d1d",
+              "name": "hasContactPage",
+              "value": "={{ $('Analyze Website1').item.json.hasContactPage }}",
+              "type": "string"
+            },
+            {
+              "id": "24443722-9522-4ff4-bffa-a46f157cb517",
+              "name": "socialLinks",
+              "value": "={{ $('Analyze Website1').item.json.socialLinks }}",
+              "type": "object"
+            },
+            {
+              "id": "c62fb0c5-dd07-4aa1-b980-40307837c5a3",
+              "name": "totalSocialLinks",
+              "value": "={{ $('Analyze Website1').item.json.totalSocialLinks }}",
+              "type": "number"
+            },
+            {
+              "id": "d5736a61-d7ee-4854-b2e9-d51001fcf087",
+              "name": "hasFacebook",
+              "value": "={{ $('Analyze Website1').item.json.hasFacebook }}",
+              "type": "string"
+            },
+            {
+              "id": "71e3e852-65be-4a7b-9b23-df41f1c458cd",
+              "name": "hasTwitter",
+              "value": "={{ $('Analyze Website1').item.json.hasTwitter }}",
+              "type": "string"
+            },
+            {
+              "id": "7bf09f37-039e-4047-ae5e-bc7b64190f78",
+              "name": "hasLinkedin",
+              "value": "={{ $('Analyze Website1').item.json.hasLinkedin }}",
+              "type": "string"
+            },
+            {
+              "id": "1a1fd73c-fd79-47c3-b284-b3a922bc3907",
+              "name": "hasInstagram",
+              "value": "={{ $('Analyze Website1').item.json.hasInstagram }}",
+              "type": "string"
+            },
+            {
+              "id": "cb1f0dc3-3c0e-4587-806a-a5f5c63f7a72",
+              "name": "hasYoutube",
+              "value": "={{ $('Analyze Website1').item.json.hasYoutube }}",
+              "type": "string"
+            },
+            {
+              "id": "d067feca-d539-478f-b43c-93e03f3e315e",
+              "name": "hasPinterest",
+              "value": "={{ $('Analyze Website1').item.json.hasPinterest }}",
+              "type": "string"
+            },
+            {
+              "id": "feed86be-5e8d-4b15-8ed8-6dc60f20a4ab",
+              "name": "hasTiktok",
+              "value": "={{ $('Analyze Website1').item.json.hasTiktok }}",
+              "type": "string"
+            },
+            {
+              "id": "06e2033b-31aa-4c96-832f-49aac8b8809f",
+              "name": "hasWhatsapp",
+              "value": "={{ $('Analyze Website1').item.json.hasWhatsapp }}",
+              "type": "string"
+            },
+            {
+              "id": "bfcf996f-dbeb-4aea-a736-35c53ee58153",
+              "name": "seoScore",
+              "value": "={{ $('Analyze Website1').item.json.seoScore }}",
+              "type": "number"
+            },
+            {
+              "id": "bc98570d-ed44-4908-a860-5c33cb510841",
+              "name": "seoGrade",
+              "value": "={{ $('Analyze Website1').item.json.seoGrade }}",
+              "type": "string"
+            },
+            {
+              "id": "beffe347-e0a3-4b77-83a7-6932bd486e65",
+              "name": "status",
+              "value": "={{ $('Analyze Website1').item.json.status }}",
+              "type": "string"
+            },
+            {
+              "id": "b9d302ee-1b81-4937-a7e0-612f730c390f",
+              "name": "analyzedAt",
+              "value": "={{ $('Analyze Website1').item.json.analyzedAt }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -280,
+        -540
+      ],
+      "id": "0ad9a47d-b779-4844-8209-f1fbd8bad520",
+      "name": "Edit Fields2"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all() || [];\nconst totalItems = items.length;\n\nif (totalItems === 0) {\n  throw new Error(\"No input items found in 'User-Agent Rotation' node.\");\n}\n\n// User-Agent Pool Manager Class\nclass UserAgentPool {\n\tconstructor() {\n\t\tthis.pools = {\n\t\t\tdesktop_chrome: [\n\t\t\t\t'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',\n\t\t\t\t'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',\n\t\t\t\t'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',\n\t\t\t\t'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',\n\t\t\t\t'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'\n\t\t\t],\n\t\t\tdesktop_firefox: [\n\t\t\t\t'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0',\n\t\t\t\t'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:132.0) Gecko/20100101 Firefox/132.0',\n\t\t\t\t'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:133.0) Gecko/20100101 Firefox/133.0',\n\t\t\t\t'Mozilla/5.0 (X11; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0'\n\t\t\t],\n\t\t\tdesktop_safari: [\n\t\t\t\t'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2.1 Safari/605.1.15',\n\t\t\t\t'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1.2 Safari/605.1.15',\n\t\t\t\t'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_6) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2.1 Safari/605.1.15'\n\t\t\t],\n\t\t\tdesktop_edge: [\n\t\t\t\t'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0',\n\t\t\t\t'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0'\n\t\t\t],\n\t\t\tmobile_devices: [\n\t\t\t\t'Mozilla/5.0 (iPhone; CPU iPhone OS 17_2_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1',\n\t\t\t\t'Mozilla/5.0 (Linux; Android 14; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36',\n\t\t\t\t'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36',\n\t\t\t\t'Mozilla/5.0 (iPad; CPU OS 17_2_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1'\n\t\t\t]\n\t\t};\n\n\t\tthis.usageCount = {};\n\t\tthis.lastUsed = {};\n\n\t\t// Initialize usage tracking\n\t\tObject.values(this.pools).flat().forEach(ua => {\n\t\t\tthis.usageCount[ua] = 0;\n\t\t\tthis.lastUsed[ua] = 0;\n\t\t});\n\t}\n\n\tgetLeastUsedUA() {\n\t\tconst allUAs = Object.values(this.pools).flat();\n\t\treturn allUAs.sort((a, b) => {\n\t\t\tif (this.usageCount[a] !== this.usageCount[b]) {\n\t\t\t\treturn this.usageCount[a] - this.usageCount[b];\n\t\t\t}\n\t\t\treturn this.lastUsed[a] - this.lastUsed[b];\n\t\t})[0];\n\t}\n\n\tgetTimeRotatedUA() {\n\t\tconst now = Date.now();\n\t\tconst cooldownTime = 30000;\n\n\t\tconst available = Object.values(this.pools).flat().filter(ua => {\n\t\t\treturn (now - this.lastUsed[ua]) > cooldownTime;\n\t\t});\n\n\t\tif (available.length === 0) {\n\t\t\treturn Object.values(this.pools).flat().sort((a, b) => this.lastUsed[a] - this.lastUsed[b])[0];\n\t\t}\n\n\t\treturn available[Math.floor(Math.random() * available.length)];\n\t}\n\n\tgetWeightedRandomUA() {\n\t\tconst weights = {\n\t\t\tdesktop_chrome: 0.45,\n\t\t\tdesktop_firefox: 0.25,\n\t\t\tdesktop_safari: 0.15,\n\t\t\tdesktop_edge: 0.10,\n\t\t\tmobile_devices: 0.05\n\t\t};\n\n\t\tconst rand = Math.random();\n\t\tlet cumulative = 0;\n\n\t\tfor (const [key, weight] of Object.entries(weights)) {\n\t\t\tcumulative += weight;\n\t\t\tif (rand <= cumulative) {\n\t\t\t\tconst pool = this.pools[key];\n\t\t\t\treturn pool[Math.floor(Math.random() * pool.length)];\n\t\t\t}\n\t\t}\n\n\t\treturn this.pools.desktop_chrome[0];\n\t}\n\n\tmarkAsUsed(ua) {\n\t\tthis.usageCount[ua]++;\n\t\tthis.lastUsed[ua] = Date.now();\n\t}\n\n\tgetUA(strategy = 'weighted') {\n\t\tlet ua;\n\n\t\tswitch (strategy) {\n\t\t\tcase 'least_used':\n\t\t\t\tua = this.getLeastUsedUA();\n\t\t\t\tbreak;\n\t\t\tcase 'time_rotated':\n\t\t\t\tua = this.getTimeRotatedUA();\n\t\t\t\tbreak;\n\t\t\tcase 'weighted':\n\t\t\tdefault:\n\t\t\t\tua = this.getWeightedRandomUA();\n\t\t\t\tbreak;\n\t\t}\n\n\t\tthis.markAsUsed(ua);\n\t\treturn ua;\n\t}\n}\n\n// Domain-based delay function\nfunction getIPBasedDelay(domain) {\n\tif (!domain || typeof domain !== 'string') {\n\t\treturn 1000; // Default 1 second delay\n\t}\n\t\n\tlet hash = 0;\n\tfor (let i = 0; i < domain.length; i++) {\n\t\thash = ((hash << 5) - hash) + domain.charCodeAt(i);\n\t\thash |= 0;\n\t}\n\treturn Math.abs(hash % 3000);\n}\n\n// Initialize pool\nconst uaPool = new UserAgentPool();\n\n// Map over each item with error handling\nreturn items.map((item, index) => {\n\ttry {\n\t\t// Handle different item structures\n\t\tlet domain = '';\n\t\tlet itemData = {};\n\t\t\n\t\t// Check various possible structures\n\t\tif (item && item.json && item.json.domain) {\n\t\t\tdomain = item.json.domain;\n\t\t\titemData = item.json;\n\t\t} else if (item && item.domain) {\n\t\t\tdomain = item.domain;\n\t\t\titemData = item;\n\t\t} else if (typeof item === 'string') {\n\t\t\tdomain = item;\n\t\t\titemData = { domain: item };\n\t\t} else if (item && typeof item === 'object') {\n\t\t\t// Try to find domain in any property\n\t\t\tdomain = item.domain || item.url || item.name || 'unknown-domain.com';\n\t\t\titemData = item;\n\t\t} else {\n\t\t\tconsole.log(`Warning: Unexpected item structure at index ${index}:`, item);\n\t\t\tdomain = 'unknown-domain.com';\n\t\t\titemData = { domain: domain };\n\t\t}\n\n\t\tif (!domain || domain === '') {\n\t\t\tdomain = 'unknown-domain.com';\n\t\t}\n\n\t\tconst totalItems = items.length;\n\t\tlet strategy = 'weighted';\n\n\t\tif (totalItems > 1000) strategy = 'least_used';\n\t\telse if (totalItems > 100) strategy = 'time_rotated';\n\n\t\tconst ua = uaPool.getUA(strategy);\n\n\t\tconst browser = ua.includes('Chrome') ? 'chrome' :\n\t\t                ua.includes('Firefox') ? 'firefox' :\n\t\t                ua.includes('Safari') && !ua.includes('Chrome') ? 'safari' :\n\t\t                ua.includes('Edg') ? 'edge' : 'other';\n\n\t\tconst referers = [\n\t\t\t`https://www.google.com/search?q=${encodeURIComponent(domain)}`,\n\t\t\t`https://www.bing.com/search?q=${encodeURIComponent(domain)}`,\n\t\t\t`https://duckduckgo.com/?q=${encodeURIComponent(domain)}`,\n\t\t\t'',\n\t\t\t'https://www.google.com/',\n\t\t\t'https://www.linkedin.com/',\n\t\t\t'https://twitter.com/'\n\t\t];\n\n\t\tconst referer = referers[Math.floor(Math.random() * referers.length)];\n\t\tconst delay = getIPBasedDelay(domain);\n\n\t\t// Headers\n\t\tconst headers = {\n\t\t\t'User-Agent': ua,\n\t\t\t'Accept': browser === 'firefox'\n\t\t\t\t? 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8'\n\t\t\t\t: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',\n\t\t\t'Accept-Language': 'en-US,en;q=0.9',\n\t\t\t'Accept-Encoding': 'gzip, deflate, br, zstd',\n\t\t\t'DNT': '1',\n\t\t\t'Connection': 'keep-alive',\n\t\t\t'Upgrade-Insecure-Requests': '1',\n\t\t\t'Sec-Fetch-Dest': 'document',\n\t\t\t'Sec-Fetch-Mode': 'navigate',\n\t\t\t'Sec-Fetch-Site': referer ? 'cross-site' : 'none',\n\t\t\t'Sec-Fetch-User': '?1',\n\t\t\t'Cache-Control': 'max-age=0'\n\t\t};\n\n\t\t// Browser-specific headers\n\t\tif (browser === 'chrome' || browser === 'edge') {\n\t\t\theaders['Sec-Ch-Ua'] = browser === 'edge'\n\t\t\t\t? '\"Microsoft Edge\";v=\"131\", \"Chromium\";v=\"131\", \"Not_A Brand\";v=\"24\"'\n\t\t\t\t: '\"Google Chrome\";v=\"131\", \"Chromium\";v=\"131\", \"Not_A Brand\";v=\"24\"';\n\n\t\t\theaders['Sec-Ch-Ua-Mobile'] = '?0';\n\t\t\theaders['Sec-Ch-Ua-Platform'] = ua.includes('Windows') ? '\"Windows\"' :\n\t\t\t\tua.includes('Mac') ? '\"macOS\"' : '\"Linux\"';\n\t\t}\n\n\t\t// Mobile-specific headers\n\t\tif (ua.includes('Mobile') || ua.includes('iPhone') || ua.includes('Android')) {\n\t\t\theaders['Viewport-Width'] = '390';\n\t\t\theaders['Sec-Ch-Ua-Mobile'] = '?1';\n\t\t}\n\n\t\tif (referer) {\n\t\t\theaders['Referer'] = referer;\n\t\t}\n\t\treturn {\n\t\t\tjson: {\n\t\t\t\t...itemData,\n\t\t\t\tdomain: domain, // Ensure domain is always present\n\t\t\t\theaders,\n\t\t\t\tbrowserType: browser,\n\t\t\t\tstrategy,\n\t\t\t\tuserAgent: ua,\n\t\t\t\treferer,\n\t\t\t\tipBasedDelay: delay,\n\t\t\t\tusageStats: {\n\t\t\t\t\ttotalUA: Object.values(uaPool.pools).flat().length,\n\t\t\t\t\tcurrentUsage: uaPool.usageCount[ua]\n\t\t\t\t}\n\t\t\t}\n\t\t};\n\n\t} catch (error) {\n\t\tconsole.error(`Error processing item at index ${index}:`, error.message);\n\t\tconsole.error('Item:', JSON.stringify(item, null, 2));\n\t\t\n\t\treturn {\n\t\t\tjson: {\n\t\t\t\tdomain: 'error-domain',\n\t\t\t\terror: error.message,\n\t\t\t\toriginalItem: item,\n\t\t\t\theaders: {\n\t\t\t\t\t'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'\n\t\t\t\t},\n\t\t\t\tbrowserType: 'chrome',\n\t\t\t\tstrategy: 'fallback',\n\t\t\t\tuserAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',\n\t\t\t\treferer: '',\n\t\t\t\tipBasedDelay: 1000\n\t\t\t}\n\t\t};\n\t}\n});\n\nObject.entries(uaPool.usageCount).forEach(([ua, count]) => {\n\tif (count > 0) {\n\t\tconsole.log(`${ua.substring(0, 60)}... | Used: ${count} times`);\n\t}\n});"
+      },
+      "id": "bf6eb201-4955-4f6a-9871-6f85cfdde8c1",
+      "name": "User-Agent Rotation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -660,
+        -180
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.contactPages[0].url }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        900,
+        100
+      ],
+      "id": "ead2dbe6-a9a6-448d-9216-c37825ed6fec",
+      "name": "HTTP Request",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "let items = [];\n\n// Get data from input\ntry {\n  const fetchedData = $input.all();\n  \n  if (Array.isArray(fetchedData)) {\n    items = fetchedData;\n  } else if (fetchedData) {\n    items = [fetchedData];\n  } else {\n    return [];\n  }\n} catch (error) {\n  console.log('Error accessing input data:', error.message);\n  return [];\n}\n\nif (!items || items.length === 0) {\n  return [];\n}\nlet index = 0;\nreturn items.map(item  => {\n  try {\n    // Get HTML content - handle both string and object formats\n    let html = item.json?.data || item.data || item.html || item.content || item || '';\n    \n    // Convert object with numbered keys back to string\n    if (typeof html === 'object' && html !== null && !Array.isArray(html)) {\n      const keys = Object.keys(html).filter(key => !isNaN(key)).sort((a, b) => parseInt(a) - parseInt(b));\n      html = keys.map(key => html[key]).join('');\n    }\n    \n    // Ensure we have a string\n    if (typeof html !== 'string') {\n      html = String(html || '');\n    }\n    \n    const statusCode = item.json?.statusCode || item.statusCode || 200;\n    const headers = item.json?.headers || item.headers || {};\n    \n    // Get the URL from Fetch Website1 node and extract domain\n    let domain = $('Has Contact Page').all()[index]?.json?.domain;\n    index++;\n    let fetchedUrl = '';\n    // First, try to get URL from the previous Fetch Website1 node \n    const baseUrl = `https://${domain}`;\n    \n    // Platform Detection\n    let platform = 'Unknown';\n    const htmlLower = html.toLowerCase();\n    \n    if (htmlLower.includes('wp-content') || htmlLower.includes('wordpress') || htmlLower.includes('/wp-json/') || htmlLower.includes('wp-admin')) {\n      platform = 'WordPress';\n    } else if (htmlLower.includes('shopify') || htmlLower.includes('cdn.shopify.com') || htmlLower.includes('shopify-analytics')) {\n      platform = 'Shopify';\n    } else if (htmlLower.includes('wix.com') || htmlLower.includes('_wix') || htmlLower.includes('wix-code')) {\n      platform = 'Wix';\n    } else if (htmlLower.includes('squarespace') || htmlLower.includes('squarespace.com') || htmlLower.includes('squarespace-cdn')) {\n      platform = 'Squarespace';\n    } else if (htmlLower.includes('webflow') || htmlLower.includes('webflow.com') || htmlLower.includes('webflow.io')) {\n      platform = 'Webflow';\n    } else if (htmlLower.includes('react') || htmlLower.includes('next.js') || htmlLower.includes('_next/')) {\n      platform = 'React/Next.js';\n    } else if (htmlLower.includes('drupal') || htmlLower.includes('drupal.org')) {\n      platform = 'Drupal';\n    } else if (htmlLower.includes('joomla') || htmlLower.includes('joomla.org')) {\n      platform = 'Joomla';\n    } else if (htmlLower.includes('magento') || htmlLower.includes('mage/')) {\n      platform = 'Magento';\n    } else if (htmlLower.includes('generator\" content=\"cms\"')) {\n      platform = 'Custom CMS';\n    }\n    \n    // Purpose Detection - Enhanced with more specific categories\n    let purpose = 'General';    \n    // Security Analysis\n    const isHttps = (item.json?.httpsUrl || item.httpsUrl || item.url || '').startsWith('https');\n    const hasHSTS = headers['strict-transport-security'] ? 'Yes' : 'No';\n    const hasCSP = headers['content-security-policy'] ? 'Yes' : 'No';\n    const hasXFrameOptions = headers['x-frame-options'] ? 'Yes' : 'No';\n    \n    // SEO Analysis\n    const titleMatch = html.match(/<title[^>]*>([^<]*)<\\/title>/i);\n    const hasTitle = titleMatch ? 'Yes' : 'No';\n    const titleLength = titleMatch ? titleMatch[1].trim().length : 0;\n    const titleOptimal = titleLength >= 30 && titleLength <= 60 ? 'Yes' : 'No';\n    \n    const descriptionMatch = html.match(/<meta[^>]*name=[\\\"']description[\\\"'][^>]*content=[\\\"']([^\\\"']*)[\\\"']/i);\n    const hasDescription = descriptionMatch ? 'Yes' : 'No';\n    const descriptionLength = descriptionMatch ? descriptionMatch[1].trim().length : 0;\n    const descriptionOptimal = descriptionLength >= 120 && descriptionLength <= 160 ? 'Yes' : 'No';\n    \n    // Content Structure\n    const hasH1 = html.includes('<h1') ? 'Yes' : 'No';\n    const h1Count = (html.match(/<h1[^>]*>/gi) || []).length;\n    const hasH2 = html.includes('<h2') ? 'Yes' : 'No';\n    \n    // Technical SEO\n    const hasViewport = html.includes('name=\"viewport\"') ? 'Yes' : 'No';\n    const hasOpenGraph = html.includes('property=\"og:') ? 'Yes' : 'No';\n    const hasTwitterCard = html.includes('name=\"twitter:') ? 'Yes' : 'No';\n    const hasCanonical = html.includes('rel=\"canonical\"') ? 'Yes' : 'No';\n    const hasRobots = html.includes('name=\"robots\"') ? 'Yes' : 'No';\n    const hasStructuredData = html.includes('application/ld+json') || html.includes('schema.org') ? 'Yes' : 'No';\n    \n    // Performance\n    const hasLazyLoading = html.includes('loading=\"lazy\"') ? 'Yes' : 'No';\n    const hasPreload = html.includes('rel=\"preload\"') ? 'Yes' : 'No';\n    \n    // Accessibility\n    const hasAltTags = html.includes('alt=') ? 'Yes' : 'No';\n    const hasLang = html.includes('lang=') ? 'Yes' : 'No';\n    \n    // Contact Information Extraction\n    \n    // Enhanced Email Extraction with extensive filtering\n    const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}/g;\n    const emailMatches = html.match(emailRegex) || [];\n    \n    // Extensive list of blacklisted email patterns and domains\n    const blacklistedPatterns = [\n      // Generic/Example emails\n      'example.com', 'test.com', 'placeholder', 'sample.com', 'yoursite.com',\n      'domain.com', 'website.com', 'company.com', 'business.com', 'site.com',\n      'yourdomain.com', 'mysite.com', 'mycompany.com', 'mydomain.com',\n      \n      // System/Analytics emails\n      'sentry.io', 'sentry.wixpress.com', 'tracking', 'analytics', 'pixel',\n      'intercom', 'hubspot', 'mailchimp', 'sendgrid', 'mailgun',\n      'googleusercontent.com', 'googleapis.com', 'gstatic.com',\n      \n      // No-reply patterns\n      'noreply', 'no-reply', 'donotreply', 'do-not-reply', 'notification',\n      'automated', 'system', 'mailer-daemon', 'postmaster', 'bounce',\n      \n      // Local/Test emails\n      'localhost', '127.0.0.1', 'local.com', 'internal.com',\n      \n      // CDN/Cloud services\n      'cloudfront.net', 'amazonaws.com', 'cloudflare.com', 'akamai.net',\n      'fastly.net', 'cdn.com', 'static.com', 'assets.com',\n      \n      // Development/Tech services\n      'github.com', 'gitlab.com', 'bitbucket.org', 'heroku.com',\n      'vercel.app', 'netlify.com', 'firebase.com', 'supabase.com',\n      \n      // Image/Media extensions\n      '.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.ico', '.bmp',\n      '.mp4', '.mp3', '.wav', '.avi', '.mov', '.pdf',\n      \n      // Social media platforms (for filtering out social media email formats)\n      'facebookmail.com', 'twitter.com', 'instagram.com', 'linkedin.com',\n      \n      // Payment processors\n      'paypal.com', 'stripe.com', 'square.com', 'checkout.com',\n      \n      // Specific blocked emails from your list\n      'pbz', 'keen.io', 'smugmug.com', 'mybluehost', '.dev@', '.mail@',\n      'proteam', 'podcast', 'umusic', 'giftnote', 'heic', 'sansoxygen.com',\n      \n      // Russian domains\n      '.ru'\n    ];\n    \n    // Generic username patterns to filter\n    const genericUsernames = [\n      'info', 'admin', 'support', 'contact', 'help', 'sales', 'service',\n      'team', 'hello', 'hi', 'hey', 'mail', 'email', 'newsletter',\n      'subscribe', 'unsubscribe', 'webmaster', 'hostmaster', 'root',\n      'abuse', 'spam', 'privacy', 'security', 'billing', 'accounts',\n      'hr', 'jobs', 'careers', 'press', 'media', 'marketing', 'pr',\n      'feedback', 'suggestions', 'complaints', 'enquiries', 'enquiry',\n      'query', 'queries', 'noc', 'tech', 'technical', 'it', 'dev',\n      'developer', 'api', 'alerts', 'notifications', 'updates',\n      'news', 'blog', 'post', 'comments', 'moderator', 'editor',\n      'author', 'writer', 'contributor', 'guest', 'user', 'users',\n      'member', 'members', 'account', 'accounts', 'profile', 'profiles',\n      'registration', 'register', 'signup', 'signin', 'login', 'logout',\n      'password', 'reset', 'confirm', 'verify', 'validation', 'activate',\n      'test', 'testing', 'demo', 'trial', 'free', 'pro', 'premium',\n      'enterprise', 'business', 'corporate', 'company', 'office',\n      'general', 'public', 'private', 'internal', 'external',\n      'customer', 'client', 'partner', 'vendor', 'supplier',\n      'invoice', 'order', 'orders', 'payment', 'payments', 'refund',\n      'shipping', 'delivery', 'returns', 'exchange', 'warranty',\n      'legal', 'compliance', 'gdpr', 'privacy', 'terms', 'policy',\n      'disclaimer', 'copyright', 'trademark', 'patents', 'ip',\n      'investor', 'investors', 'shareholder', 'shareholders', 'board',\n      'ceo', 'cto', 'cfo', 'coo', 'hr', 'recruiter', 'hiring',\n      'community', 'forum', 'discussion', 'chat', 'talk', 'ask',\n      'faq', 'faqs', 'kb', 'knowledge', 'docs', 'documentation',\n      'api', 'sdk', 'integration', 'webhook', 'callback', 'bounce',\n      'undelivered', 'failed', 'mailer', 'daemon', 'system', 'auto',\n      'automated', 'bot', 'robot', 'crawler', 'spider', 'scraper',\n      'monitor', 'monitoring', 'alert', 'warning', 'error', 'errors',\n      'log', 'logs', 'report', 'reports', 'analytics', 'metrics',\n      'stats', 'statistics', 'data', 'export', 'import', 'backup',\n      'restore', 'archive', 'archives', 'old', 'legacy', 'deprecated',\n      'temp', 'tmp', 'temporary', 'cache', 'cached', 'buffer',\n      'queue', 'batch', 'bulk', 'mass', 'all', 'everyone', 'everybody',\n      'nobody', 'somebody', 'someone', 'anyone', 'anybody', 'whoever',\n      'whatever', 'whenever', 'wherever', 'however', 'whichever',\n      'social', 'facebook', 'twitter', 'instagram', 'youtube', 'linkedin',\n      'pinterest', 'tiktok', 'snapchat', 'whatsapp', 'telegram',\n      'discord', 'slack', 'teams', 'zoom', 'skype', 'messenger',\n      'notification', 'notifications', 'reminder', 'reminders', 'digest',\n      'summary', 'weekly', 'daily', 'monthly', 'yearly', 'annual',\n      'quarterly', 'seasonal', 'holiday', 'special', 'promo', 'promotion',\n      'deal', 'deals', 'offer', 'offers', 'discount', 'discounts',\n      'coupon', 'coupons', 'code', 'codes', 'voucher', 'vouchers',\n      'gift', 'gifts', 'reward', 'rewards', 'loyalty', 'points',\n      'affiliate', 'affiliates', 'referral', 'referrals', 'refer',\n      'share', 'sharing', 'forward', 'forwarding', 'reply', 'replies',\n      'response', 'responses', 'answer', 'answers', 'question', 'questions',\n      'survey', 'surveys', 'poll', 'polls', 'vote', 'votes', 'voting',\n      'feedback', 'review', 'reviews', 'rating', 'ratings', 'rate',\n      'comment', 'comments', 'testimonial', 'testimonials', 'case',\n      'study', 'studies', 'research', 'analysis', 'report', 'white',\n      'paper', 'ebook', 'guide', 'tutorial', 'course', 'lesson',\n      'training', 'webinar', 'seminar', 'workshop', 'event', 'events',\n      'conference', 'summit', 'meetup', 'meeting', 'appointment',\n      'booking', 'reservation', 'rsvp', 'attendance', 'registration',\n      'ticket', 'tickets', 'pass', 'passes', 'entry', 'access',\n      'vip', 'exclusive', 'member', 'membership', 'subscription',\n      'subscribe', 'unsubscribe', 'opt', 'optin', 'optout', 'consent',\n      'permission', 'preferences', 'settings', 'config', 'configuration',\n      'setup', 'install', 'installation', 'update', 'updates', 'upgrade',\n      'patch', 'patches', 'fix', 'fixes', 'bug', 'bugs', 'issue',\n      'issues', 'problem', 'problems', 'solution', 'solutions', 'resolve',\n      'resolved', 'pending', 'processing', 'progress', 'status', 'queue',\n      'inbox', 'outbox', 'sent', 'drafts', 'trash', 'junk', 'spam',\n      'phishing', 'scam', 'fraud', 'fake', 'false', 'invalid', 'valid',\n      'verified', 'unverified', 'confirmed', 'unconfirmed', 'approved',\n      'unapproved', 'rejected', 'accepted', 'declined', 'blocked',\n      'unblocked', 'banned', 'unbanned', 'suspended', 'active', 'inactive',\n      'enabled', 'disabled', 'on', 'off', 'yes', 'no', 'true', 'false',\n      'default', 'custom', 'standard', 'premium', 'pro', 'basic', 'free',\n      'paid', 'trial', 'beta', 'alpha', 'stable', 'release', 'version',\n      'build', 'dev', 'development', 'staging', 'production', 'live',\n      'test1', 'test2', 'test3', 'testing1', 'testing2', 'testing3',\n      'example', 'sample', 'demo1', 'demo2', 'demo3', 'dummy', 'fake',\n      'mock', 'placeholder', 'temporary', 'temp1', 'temp2', 'temp3',\n      'xyz', 'abc', 'foo', 'bar', 'baz', 'qux', 'quux', 'corge',\n      'grault', 'garply', 'waldo', 'fred', 'plugh', 'xyzzy', 'thud',\n      'zzz', 'aaa', 'bbb', 'ccc', 'ddd', 'eee', 'fff', 'ggg', 'hhh',\n      'iii', 'jjj', 'kkk', 'lll', 'mmm', 'nnn', 'ooo', 'ppp', 'qqq',\n      'rrr', 'sss', 'ttt', 'uuu', 'vvv', 'www', 'xxx', 'yyy'\n    ];\n    \n    // Function to score email quality (higher is better)\n    const scoreEmail = (email) => {\n      let score = 100;\n      const emailLower = email.toLowerCase();\n      const [username, domain] = emailLower.split('@');\n      \n      // Penalize generic usernames\n      genericUsernames.forEach(generic => {\n        if (username === generic || username.startsWith(generic + '.') || username.endsWith('.' + generic)) {\n          score -= 30;\n        }\n      });\n      \n      // Penalize emails with numbers at the end (often generic)\n      if (/\\d{2,}$/.test(username)) {\n        score -= 20;\n      }\n      \n      // Penalize very short usernames\n      if (username.length <= 2) {\n        score -= 25;\n      }\n      \n      // Penalize emails that look like hashes\n      if (/^[a-f0-9]{8,}$/.test(username)) {\n        score -= 50;\n      }\n      \n      // Bonus for personal-looking emails (firstname.lastname pattern)\n      if (/^[a-z]+\\.[a-z]+$/.test(username) && username.length > 5) {\n        score += 30;\n      }\n      \n      // Bonus for emails with company domain (not generic providers)\n      const genericProviders = ['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'aol.com', 'mail.com', 'protonmail.com', 'icloud.com'];\n      if (!genericProviders.includes(domain)) {\n        score += 20;\n      }\n      \n      // Bonus if domain matches the website domain\n      if (domain === domain.toLowerCase()) {\n        score += 40;\n      }\n      \n      return score;\n    };\n    \n    const validEmails = [...new Set(emailMatches)].filter(email => {\n      const emailLower = email.toLowerCase().trim();\n      const [username, domain] = emailLower.split('@');\n      \n      // Basic validation\n      const emailValidationRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$/;\n      if (!emailValidationRegex.test(emailLower)) return false;\n      \n      // Length validation\n      if (emailLower.length < 5 || emailLower.length > 254) return false;\n      \n      // Check against blacklisted patterns\n      for (const pattern of blacklistedPatterns) {\n        if (emailLower.includes(pattern)) return false;\n      }\n      \n      // Check for hash-like emails (32+ character usernames that look like hashes)\n      if (/^[a-f0-9]{32,}@/.test(emailLower)) return false;\n      \n      // Check for emails with too many dots or special characters\n      if ((username.match(/\\./g) || []).length > 2) return false;\n      \n      // Filter out emails that are just generic username @ gmail\n      if (genericUsernames.includes(username) && emailLower.includes('gmail.com')) return false;\n      \n      // Additional specific filters from your list\n      const specificBlockList = [\n        'ericjonesmyemail@gmail.com',\n        'wweeiihhuuaanngg@gmail.com',\n        'info@gmail.com',\n        'ula@gmail.com',\n        'myemail@',\n        'yourname@',\n        'name@domain',\n        'email@domain',\n        'your@email',\n        'user@',\n        'you@',\n        'hi@',\n        'test@',\n        'job@',\n        'news@',\n        'name@',\n        'domain@',\n        'xxx@',\n        'discovered@',\n        'donate@',\n        'link@',\n        'index@',\n        'click@',\n        'remove@',\n        'accessibility@'\n      ];\n      \n      for (const blocked of specificBlockList) {\n        if (emailLower.includes(blocked)) return false;\n      }\n      \n      return true;\n    });\n    \n    // Sort emails by quality score and take top 2\n    const scoredEmails = validEmails.map(email => ({\n      email,\n      score: scoreEmail(email)\n    }));\n    \n    scoredEmails.sort((a, b) => b.score - a.score);\n    const uniqueEmails = scoredEmails.slice(0, 2).map(item => item.email);\n    \n    // Extract Phone Numbers with enhanced validation\n    const phoneRegex = /(?:\\+?1[-.\\s]?)?\\(?([0-9]{3})\\)?[-.\\s]?([0-9]{3})[-.\\s]?([0-9]{4})|(?:\\+[1-9]\\d{0,3}[-.\\s]?)?(?:\\([0-9]{1,4}\\)[-.\\s]?)?[0-9]{1,4}[-.\\s]?[0-9]{1,9}/g;\n    const phoneMatches = html.match(phoneRegex) || [];\n    \n    const validPhones = [...new Set(phoneMatches)].filter(phone => {\n      // Clean the phone number for validation\n      const cleanPhone = phone.replace(/[^\\d+]/g, '');\n      \n      return cleanPhone.length >= 10 && \n             cleanPhone.length <= 15 && // International format max length\n             !cleanPhone.includes('1234567890') && \n             !cleanPhone.includes('0000000000') &&\n             !cleanPhone.includes('1111111111') &&\n             !cleanPhone.includes('2222222222') &&\n             !cleanPhone.includes('3333333333') &&\n             !cleanPhone.includes('4444444444') &&\n             !cleanPhone.includes('5555555555') &&\n             !cleanPhone.includes('6666666666') &&\n             !cleanPhone.includes('7777777777') &&\n             !cleanPhone.includes('8888888888') &&\n             !cleanPhone.includes('9999999999') &&\n             !/^(\\d)\\1+$/.test(cleanPhone.replace(/^\\+?1/, '')) && // No repeated digits\n             !/123456789/.test(cleanPhone) && // No sequential numbers\n             !/987654321/.test(cleanPhone); // No reverse sequential\n    });\n    \n    // Limit to maximum 2 phone numbers\n    const uniquePhones = validPhones.slice(0, 2);\n    \n    // Enhanced Contact Page Detection\n    // Use a more specific regex that properly captures individual anchor tags\n    const contactPageRegex = /<a[^>]*href=[\"']([^\"']+)[\"'][^>]*>([^<]+(?:<[^>]+>[^<]+)*?)<\\/a>/gi;\n    const contactPageMatches = [];\n    let match;\n    \n    // Extended list of contact-related keywords\n    const contactKeywords = [\n      'contact', 'contact us', 'contact-us', 'contactus',\n      'get in touch', 'get-in-touch', 'getintouch',\n      'reach out', 'reach-out', 'reachout',\n      'reach us', 'reach-us', 'reachus',\n      'talk to us', 'talk-to-us', 'talktous',\n      'speak to us', 'speak-to-us', 'speaktous',\n      'get started', 'get-started', 'getstarted',\n      'start now', 'start-now', 'startnow',\n      'connect', 'connect with us', 'connect-with-us',\n      'message us', 'message-us', 'messageus',\n      'email us', 'email-us', 'emailus',\n      'call us', 'call-us', 'callus',\n      'write to us', 'write-to-us', 'writetous',\n      'drop us a line', 'drop-us-a-line',\n      'send message', 'send-message', 'sendmessage',\n      'send us a message', 'send-us-a-message',\n      'inquiry', 'inquiries', 'enquiry', 'enquiries',\n      'questions', 'ask us', 'ask-us', 'askus',\n      'support', 'help', 'assistance',\n      'let\\'s talk', 'lets-talk', 'letstalk',\n      'let\\'s chat', 'lets-chat', 'letschat',\n      'schedule a call', 'schedule-a-call', 'scheduleacall',\n      'book a call', 'book-a-call', 'bookacall',\n      'request info', 'request-info', 'requestinfo',\n      'more info', 'more-info', 'moreinfo',\n      'find us', 'find-us', 'findus',\n      'visit us', 'visit-us', 'visitus',\n      'office', 'offices', 'location', 'locations',\n      'where to find us', 'where-to-find-us',\n      'how to reach us', 'how-to-reach-us',\n      'say hello', 'say-hello', 'sayhello',\n      'drop by', 'drop-by', 'dropby',\n      'come see us', 'come-see-us', 'comeseeus',\n      'feedback', 'suggestions', 'comments'\n    ];\n    \n    // First, try to find all anchor tags and filter for contact-related ones\n    const allLinksRegex = /<a[^>]*href=[\"']([^\"']+)[\"'][^>]*?>([^<]+(?:<(?!\\/a>)[^>]+>[^<]+)*?)<\\/a>/gi;\n    const allLinks = [];\n    \n    while ((match = allLinksRegex.exec(html)) !== null) {\n      if (match[1] && match[1].trim()) {\n        allLinks.push({\n          href: match[1].trim(),\n          text: match[2].replace(/<[^>]+>/g, ' ').replace(/\\s+/g, ' ').trim()\n        });\n      }\n    }\n    \n    // Process each link\n    for (const link of allLinks) {\n      const href = link.href;\n      const linkText = link.text.toLowerCase();\n      const hrefLower = href.toLowerCase();\n      \n      // Check if this is a contact-related link\n      let isContactLink = false;\n      \n      // Priority check: href contains contact-related patterns\n      if (hrefLower.includes('contact') || \n          hrefLower.includes('get-in-touch') || \n          hrefLower.includes('reach-out') ||\n          hrefLower.includes('connect') ||\n          hrefLower.includes('inquiry') ||\n          hrefLower.includes('enquiry')) {\n        isContactLink = true;\n      }\n      \n      // Secondary check: link text contains contact keywords\n      if (!isContactLink) {\n        for (const keyword of contactKeywords) {\n          if (linkText === keyword || \n              linkText.includes(keyword) ||\n              linkText.replace(/\\s+/g, '-') === keyword ||\n              linkText.replace(/\\s+/g, '') === keyword.replace(/\\s+/g, '')) {\n            isContactLink = true;\n            break;\n          }\n        }\n      }\n      \n      if (isContactLink && href) {\n        let fullUrl = href;\n        \n        // Convert relative URLs to absolute URLs\n        if (href.startsWith('/')) {\n          fullUrl = baseUrl + href;\n        } else if (href.startsWith('./')) {\n          fullUrl = baseUrl + href.substring(1);\n        } else if (href.startsWith('../')) {\n          // Handle relative parent directory paths\n          const pathParts = baseUrl.split('/');\n          pathParts.pop(); // Remove last segment\n          fullUrl = pathParts.join('/') + href.substring(2);\n        } else if (!href.startsWith('http') && !href.includes(':')) {\n          fullUrl = baseUrl + '/' + href;\n        }\n        \n        // Clean up double slashes (except after protocol)\n        fullUrl = fullUrl.replace(/([^:]\\/)\\/+/g, '$1');\n        \n        // Filter out non-contact URLs and invalid URLs\n        if (!fullUrl.includes('mailto:') && \n            !fullUrl.includes('tel:') && \n            !fullUrl.includes('javascript:') && \n            !fullUrl.includes('void(0)') &&\n            !fullUrl.startsWith('#') &&\n            fullUrl.length < 200 &&\n            fullUrl.includes('://')) {\n          contactPageMatches.push({\n            url: fullUrl,\n            linkText: link.text\n          });\n        }\n      }\n    }\n    \n    // Also search for contact patterns in onclick handlers and data attributes\n    const onclickRegex = /(?:onclick|data-href|data-url|href)=[\"']([^\"']*contact[^\"']*?)[\"']/gi;\n    while ((match = onclickRegex.exec(html)) !== null) {\n      const url = match[1];\n      if (url && !url.includes('javascript:') && !url.includes('void(0)') && !url.startsWith('#')) {\n        let fullUrl = url;\n        if (!url.startsWith('http')) {\n          if (url.startsWith('/')) {\n            fullUrl = baseUrl + url;\n          } else {\n            fullUrl = baseUrl + '/' + url;\n          }\n        }\n        // Clean up double slashes\n        fullUrl = fullUrl.replace(/([^:]\\/)\\/+/g, '$1');\n        \n        if (fullUrl.includes('://') && fullUrl.length < 200) {\n          contactPageMatches.push({\n            url: fullUrl,\n            linkText: 'Contact' // Default text for onclick handlers\n          });\n        }\n      }\n    }\n    \n    // Look for contact forms as indicators of contact pages\n    if (contactPageMatches.length === 0) {\n      // Check if current page has a contact form\n      const hasContactForm = html.includes('<form') && \n        (html.toLowerCase().includes('contact') || \n         html.toLowerCase().includes('message') ||\n         html.toLowerCase().includes('inquiry') ||\n         html.toLowerCase().includes('get in touch'));\n      \n      if (hasContactForm) {\n        contactPageMatches.push({\n          url: fetchedUrl,\n          linkText: 'Contact Form (Current Page)'\n        });\n      }\n    }\n    \n    // Remove duplicates, keeping only unique URLs\n    const seenUrls = new Set();\n    const uniqueContactPages = contactPageMatches.filter(item => {\n      // Normalize URL for comparison (remove trailing slashes)\n      const normalizedUrl = item.url.replace(/\\/$/, '');\n      if (seenUrls.has(normalizedUrl)) {\n        return false;\n      }\n      seenUrls.add(normalizedUrl);\n      return true;\n    });\n    \n    // If we still don't have contact pages, do a final aggressive search\n    if (uniqueContactPages.length === 0) {\n      // Look for any href that might be a contact page\n      const simpleHrefRegex = /href=[\"']([^\"']+)[\"']/gi;\n      const potentialContactUrls = [];\n      \n      while ((match = simpleHrefRegex.exec(html)) !== null) {\n        const href = match[1];\n        const hrefLower = href.toLowerCase();\n        \n        // Check if URL contains contact-related keywords\n        if ((hrefLower.includes('contact') || \n             hrefLower.includes('connect') || \n             hrefLower.includes('reach') || \n             hrefLower.includes('inquiry') || \n             hrefLower.includes('support')) &&\n            !href.includes('mailto:') &&\n            !href.includes('tel:') &&\n            !href.includes('javascript:') &&\n            !href.includes('#')) {\n          \n          let fullUrl = href;\n          if (!href.startsWith('http')) {\n            if (href.startsWith('/')) {\n              fullUrl = baseUrl + href;\n            } else {\n              fullUrl = baseUrl + '/' + href;\n            }\n          }\n          \n          fullUrl = fullUrl.replace(/([^:]\\/)\\/+/g, '$1');\n          \n          if (fullUrl.includes('://')) {\n            potentialContactUrls.push({\n              url: fullUrl,\n              linkText: 'Contact Page'\n            });\n          }\n        }\n      }\n      \n      // Add unique URLs from aggressive search\n      potentialContactUrls.forEach(item => {\n        const normalizedUrl = item.url.replace(/\\/$/, '');\n        if (!seenUrls.has(normalizedUrl)) {\n          uniqueContactPages.push(item);\n          seenUrls.add(normalizedUrl);\n        }\n      });\n    }\n    \n    // Extract Social Media Links\n    const socialLinks = {\n      facebook: [],\n      twitter: [],\n      linkedin: [],\n      instagram: [],\n      youtube: [],\n      pinterest: [],\n      tiktok: [],\n      whatsapp: []\n    };\n    \n    // Facebook\n    const facebookRegex = /https?:\\/\\/(?:www\\.)?(?:facebook\\.com|fb\\.com)\\/[a-zA-Z0-9._-]+/g;\n    socialLinks.facebook = [...new Set(html.match(facebookRegex) || [])];\n    \n    // Twitter/X\n    const twitterRegex = /https?:\\/\\/(?:www\\.)?(?:twitter\\.com|x\\.com)\\/[a-zA-Z0-9._-]+/g;\n    socialLinks.twitter = [...new Set(html.match(twitterRegex) || [])];\n    \n    // LinkedIn\n    const linkedinRegex = /https?:\\/\\/(?:www\\.)?linkedin\\.com\\/(?:in|company)\\/[a-zA-Z0-9._-]+/g;\n    socialLinks.linkedin = [...new Set(html.match(linkedinRegex) || [])];\n    \n    // Instagram\n    const instagramRegex = /https?:\\/\\/(?:www\\.)?instagram\\.com\\/[a-zA-Z0-9._-]+/g;\n    socialLinks.instagram = [...new Set(html.match(instagramRegex) || [])];\n    \n    // YouTube\n    const youtubeRegex = /https?:\\/\\/(?:www\\.)?(?:youtube\\.com\\/(?:channel\\/|user\\/|c\\/)?|youtu\\.be\\/)[a-zA-Z0-9._-]+/g;\n    socialLinks.youtube = [...new Set(html.match(youtubeRegex) || [])];\n    \n    // Pinterest\n    const pinterestRegex = /https?:\\/\\/(?:www\\.)?pinterest\\.com\\/[a-zA-Z0-9._-]+/g;\n    socialLinks.pinterest = [...new Set(html.match(pinterestRegex) || [])];\n    \n    // TikTok\n    const tiktokRegex = /https?:\\/\\/(?:www\\.)?tiktok\\.com\\/@[a-zA-Z0-9._-]+/g;\n    socialLinks.tiktok = [...new Set(html.match(tiktokRegex) || [])];\n    \n    // WhatsApp\n    const whatsappRegex = /https?:\\/\\/(?:wa\\.me|api\\.whatsapp\\.com)\\/[0-9]+/g;\n    socialLinks.whatsapp = [...new Set(html.match(whatsappRegex) || [])];\n    \n    // Count total social links\n    const totalSocialLinks = Object.values(socialLinks).reduce((total, links) => total + links.length, 0);\n    \n    // Calculate SEO Score\n    let seoScore = 0;\n    if (hasTitle === 'Yes') seoScore += 15;\n    if (titleOptimal === 'Yes') seoScore += 10;\n    if (hasDescription === 'Yes') seoScore += 15;\n    if (descriptionOptimal === 'Yes') seoScore += 10;\n    if (hasH1 === 'Yes') seoScore += 10;\n    if (h1Count === 1) seoScore += 5;\n    if (hasH2 === 'Yes') seoScore += 5;\n    if (hasCanonical === 'Yes') seoScore += 5;\n    if (hasOpenGraph === 'Yes') seoScore += 10;\n    if (hasTwitterCard === 'Yes') seoScore += 5;\n    if (hasStructuredData === 'Yes') seoScore += 10;\n    \n    return {\n      json: {        \n        // Analysis Results\n        domain: domain,\n        platform: platform,\n        purpose: purpose,\n        \n        // Security\n        isHttps: isHttps ? 'Yes' : 'No',\n        hasHSTS: hasHSTS,\n        hasCSP: hasCSP,\n        hasXFrameOptions: hasXFrameOptions,\n        \n        // SEO\n        hasTitle: hasTitle,\n        titleLength: titleLength,\n        titleOptimal: titleOptimal,\n        hasDescription: hasDescription,\n        descriptionLength: descriptionLength,\n        descriptionOptimal: descriptionOptimal,\n        \n        // Content Structure\n        hasH1: hasH1,\n        h1Count: h1Count,\n        hasH2: hasH2,\n        \n        // Technical SEO\n        hasViewport: hasViewport,\n        hasCanonical: hasCanonical,\n        hasRobots: hasRobots,\n        hasStructuredData: hasStructuredData,\n        \n        // Social Media\n        hasOpenGraph: hasOpenGraph,\n        hasTwitterCard: hasTwitterCard,\n        \n        // Performance\n        hasLazyLoading: hasLazyLoading,\n        hasPreload: hasPreload,\n        \n        // Accessibility\n        hasAltTags: hasAltTags,\n        hasLang: hasLang,\n        \n        // Contact Information\n        emails: uniqueEmails,\n        emailCount: uniqueEmails.length,\n        phones: uniquePhones,\n        phoneCount: uniquePhones.length,\n        \n        // Contact Page URLs - ENHANCED\n        contactPages: uniqueContactPages,\n        contactPageCount: uniqueContactPages.length,\n        hasContactPage: uniqueContactPages.length > 0 ? 'Yes' : 'No',\n        \n        // Social Media Links\n        socialLinks: socialLinks,\n        totalSocialLinks: totalSocialLinks,\n        hasFacebook: socialLinks.facebook.length > 0 ? 'Yes' : 'No',\n        hasTwitter: socialLinks.twitter.length > 0 ? 'Yes' : 'No',\n        hasLinkedin: socialLinks.linkedin.length > 0 ? 'Yes' : 'No',\n        hasInstagram: socialLinks.instagram.length > 0 ? 'Yes' : 'No',\n        hasYoutube: socialLinks.youtube.length > 0 ? 'Yes' : 'No',\n        hasPinterest: socialLinks.pinterest.length > 0 ? 'Yes' : 'No',\n        hasTiktok: socialLinks.tiktok.length > 0 ? 'Yes' : 'No',\n        hasWhatsapp: socialLinks.whatsapp.length > 0 ? 'Yes' : 'No',\n        \n        // Scoring\n        seoScore: seoScore,\n        seoGrade: seoScore >= 80 ? 'A' : seoScore >= 60 ? 'B' : seoScore >= 40 ? 'C' : 'D',\n        \n        // Status\n        status: statusCode === 200 ? 'Active' : `Not Accessible (${statusCode})`,\n        analyzedAt: new Date().toISOString()\n      }\n    };\n    \n  } catch (error) {\n    return {\n      json: {\n        ...item,\n        platform: 'Error',\n        purpose: 'Error',\n        status: 'Analysis Failed',\n        error: error.message,\n        analyzedAt: new Date().toISOString()\n      }\n    };\n  }\n});"
+      },
+      "id": "68a4aca9-dea1-4a65-9102-ba5ad5ca98df",
+      "name": "Analyze Website2",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1280,
+        80
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "68ce57db-fe96-41ee-81e4-bb034ba4ec11",
+              "leftValue": "={{ $json.emailCount }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1560,
+        80
+      ],
+      "id": "a956c981-ba34-49f7-9c69-357b5acffb13",
+      "name": "If1"
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        2140,
+        -60
+      ],
+      "id": "159e364c-8bd6-44d1-a7e6-fc47cf609e9b",
+      "name": "Respond to Webhook",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "numberInputs": 4
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1380,
+        -520
+      ],
+      "id": "24196c84-1795-483d-a646-1281bdb75fc0",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "fac6126e-a2d7-405d-8b18-4860601e51b2",
+              "name": "domain",
+              "value": "={{ $('User-Agent Rotation').item.json.domain }}",
+              "type": "string"
+            },
+            {
+              "id": "4955251b-a305-4d2d-bf8a-defe6809902c",
+              "name": "data",
+              "value": "={{ $json.data }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        60,
+        -200
+      ],
+      "id": "54b50e04-8e4a-4bdd-ae4a-f1912bd6e8be",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c6e3ae4d-0a91-4924-9a7e-1721425b2d0f",
+              "leftValue": "={{ $json.emails }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "array",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        540,
+        -200
+      ],
+      "id": "15045634-63b7-4617-ad2a-6a025d93454f",
+      "name": "Has Email",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "b7316cad-3054-421e-a6ae-7ff4aa18ecca",
+              "leftValue": "={{ $json.contactPages }}",
+              "rightValue": "",
+              "operator": {
+                "type": "array",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        600,
+        120
+      ],
+      "id": "f9c4796a-1811-4384-a78a-f894e6950de0",
+      "name": "Has Contact Page"
+    }
+  ],
+  "connections": {
+    "Split In Batches": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "User-Agent Rotation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Website1": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Website1": {
+      "main": [
+        [
+          {
+            "node": "Has Email",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Split In Batches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Domains": {
+      "main": [
+        [
+          {
+            "node": "Limit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Split Domains",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Limit": {
+      "main": [
+        [
+          {
+            "node": "Split In Batches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait1": {
+      "main": [
+        [
+          {
+            "node": "Fetch Website",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Website": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields2": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "User-Agent Rotation": {
+      "main": [
+        [
+          {
+            "node": "Fetch Website1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Analyze Website2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Website2": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 2
+          }
+        ],
+        [
+          {
+            "node": "Wait1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Analyze Website1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Email": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 3
+          }
+        ],
+        [
+          {
+            "node": "Has Contact Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Contact Page": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "instanceId": "5309a32c481df91be5b901952c8941c1d83853324de6b724e46766969ac974fe"
+  }
+}
